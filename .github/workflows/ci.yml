@@ -10,8 +10,6 @@ jobs:
           node-version: 20
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: node mocks/api-mock.js &
-      - run: sleep 2
       - run: npm run ci:verify
         env:
           VITE_API_BASE: http://localhost:9090
