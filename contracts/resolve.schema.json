@@ -1,0 +1,1 @@
+{ "type": "object", "required": ["hops", "final"], "properties": { "hops": { "type": "array", "items": { "type": "string" } }, "final": { "type": "string" } } }

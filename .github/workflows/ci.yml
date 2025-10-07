@@ -1,0 +1,29 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: node mocks/api-mock.ts &
+      - run: sleep 2
+      - run: npm run ci:verify
+        env:
+          VITE_API_BASE: http://localhost:9090
+          VITE_DEV_MANUAL_URL: true
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - run: go mod tidy
+      - run: go test ./...
