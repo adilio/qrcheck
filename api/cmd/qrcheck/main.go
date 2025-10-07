@@ -151,7 +151,7 @@ func fetchURLHaus(ctx context.Context, target string) URLHausResult {
 func fetchPhishTank(ctx context.Context, target string) any {
 	apiKey := os.Getenv("PHISHTANK_API_KEY")
 	if apiKey == "" {
-		return map[string]string{"error": "API key not configured"}
+		return nil
 	}
 
 	vals := url.Values{

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -40,5 +41,12 @@ func TestRateLimit(t *testing.T) {
 	handler(rr, req)
 	if rr.Code != http.StatusTooManyRequests {
 		t.Fatalf("expected 429 after exceeding limit, got %d", rr.Code)
+	}
+}
+
+func TestFetchPhishTankNoAPIKey(t *testing.T) {
+	t.Setenv("PHISHTANK_API_KEY", "")
+	if result := fetchPhishTank(context.Background(), "https://example.com"); result != nil {
+		t.Fatalf("expected nil when API key missing, got %#v", result)
 	}
 }

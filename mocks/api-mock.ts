@@ -10,7 +10,14 @@ const handler: http.RequestListener = (req, res) => {
   const url = new URL(req.url || '', 'http://localhost');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.setHeader('Content-Type', 'application/json');
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
 
   if (url.pathname === '/resolve') {
     res.end(

@@ -1,4 +1,4 @@
-# QRCheck.ca
+# QRcheck.ca
 
 QRCheck.ca is a privacy-first QR inspection toolkit. It decodes QR codes locally in your browser, scores destinations with transparent heuristics, traces redirects, and surfaces live intelligence signals from optional backend feeds. The UI draws from a liquid-glass aesthetic, supports dark/light themes, and works across desktop and mobile—including live camera scanning.
 
