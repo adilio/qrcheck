@@ -9,7 +9,8 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
-      - run: node mocks/api-mock.ts &
+      - run: npx playwright install --with-deps chromium
+      - run: node mocks/api-mock.js &
       - run: sleep 2
       - run: npm run ci:verify
         env:
