@@ -38,15 +38,45 @@
     }
   };
 
-  const signalLabels: Record<string, string> = {
-    https: 'Uses HTTPS',
-    suspicious_tld: 'Trusted TLD',
-    punycode: 'IDN / Punycode',
-    file_download: 'File download',
-    very_long: 'URL length',
-    shortener: 'Shortener',
-    scheme_safe: 'Scheme safe',
-    invalid_url: 'Valid URL'
+  const signalMeta: Record<
+    string,
+    {
+      label: string;
+      description: string;
+    }
+  > = {
+    https: {
+      label: 'Uses HTTPS',
+      description: 'Encrypted HTTPS connections help prevent attackers from reading or modifying the traffic in transit.'
+    },
+    suspicious_tld: {
+      label: 'Trusted TLD',
+      description: 'Some top-level domains see disproportionate abuse; unfamiliar endings may indicate disposable or risky hosting.'
+    },
+    punycode: {
+      label: 'IDN / Punycode',
+      description: 'Punycode encodes international characters. Attackers use it to mimic well-known domains with subtle lookalike glyphs.'
+    },
+    file_download: {
+      label: 'File download',
+      description: 'Direct links to executables or archives can deliver unwanted software. Assess the source before running downloaded files.'
+    },
+    very_long: {
+      label: 'URL length',
+      description: 'Extremely long URLs often bury malicious parameters or tracking payloads that are hard to review at a glance.'
+    },
+    shortener: {
+      label: 'Shortener',
+      description: 'Shortened URLs hide the destination. Attackers rely on that opacity to lure users to unexpected sites.'
+    },
+    scheme_safe: {
+      label: 'Scheme safe',
+      description: 'Unsafe schemes like data:, file:, or custom protocols can execute local content or bypass browser safeguards.'
+    },
+    invalid_url: {
+      label: 'Valid URL',
+      description: 'We need a parsable URL to inspect. Invalid inputs bypass browser protections and cannot be verified.'
+    }
   };
 
   const heuristicsLegend = [
@@ -81,6 +111,7 @@
   let cameraError = '';
   let dropActive = false;
   let clipboardError = '';
+  let expandedSignal: string | null = null;
 
   const captureCanvas = document.createElement('canvas');
   const captureCtx = captureCanvas.getContext('2d');
@@ -355,6 +386,14 @@
     theme = theme === 'dark' ? 'light' : 'dark';
   }
 
+  function toggleSignalDetail(key: string) {
+    expandedSignal = expandedSignal === key ? null : key;
+  }
+
+  function getSignalMeta(key: string) {
+    return signalMeta[key] ?? { label: key, description: '' };
+  }
+
   function buildIntelCards(data: IntelResponse | null): IntelCard[] {
     if (!data) return [];
     const cards: IntelCard[] = [];
@@ -496,6 +535,25 @@
 
   <section class="grid">
     <section class="panel">
+      <h2>Scan with camera</h2>
+      {#if !scanning}
+        <div class="panel-actions">
+          <button class="primary" on:click={startCameraScan} disabled={busy}>Open camera</button>
+          <span class="muted subtle">Requires HTTPS on mobile. Nothing leaves your device.</span>
+        </div>
+      {:else}
+        <div class="camera-feed">
+          <video bind:this={videoEl} autoplay playsinline muted></video>
+        </div>
+        <div class="panel-actions">
+          <button class="secondary" on:click={stopCameraScan}>Stop camera</button>
+          <span class="muted subtle">Align the QR code inside the frame for auto-detect.</span>
+        </div>
+      {/if}
+      {#if cameraError}<p class="error">{cameraError}</p>{/if}
+    </section>
+
+    <section class="panel">
       <h2>Upload or drop</h2>
       <div
         class={`dropzone ${dropActive ? 'active' : ''}`}
@@ -524,25 +582,6 @@
       </div>
       {#if step}<p class="muted subtle">{step}</p>{/if}
       {#if error}<p class="error">{error}</p>{/if}
-    </section>
-
-    <section class="panel">
-      <h2>Scan with camera</h2>
-      {#if !scanning}
-        <div class="panel-actions">
-          <button class="primary" on:click={startCameraScan} disabled={busy}>Open camera</button>
-          <span class="muted subtle">Requires HTTPS on mobile. Nothing leaves your device.</span>
-        </div>
-      {:else}
-        <div class="camera-feed">
-          <video bind:this={videoEl} autoplay playsinline muted></video>
-        </div>
-        <div class="panel-actions">
-          <button class="secondary" on:click={stopCameraScan}>Stop camera</button>
-          <span class="muted subtle">Align the QR code inside the frame for auto-detect.</span>
-        </div>
-      {/if}
-      {#if cameraError}<p class="error">{cameraError}</p>{/if}
     </section>
 
     {#if DEV_ENABLE_MANUAL_URL}
@@ -583,10 +622,21 @@
 
       <div class="signals">
         {#each result.signals as signal}
-          <div class={`signal-chip ${signal.ok ? 'ok' : 'warn'}`}>
-            <span class="chip-label">{signal.ok ? '✅' : '⚠️'} {signalLabels[signal.key] || signal.key}</span>
-            {#if signal.info}<small>{signal.info}</small>{/if}
-          </div>
+          {@const meta = getSignalMeta(signal.key)}
+          <button
+            type="button"
+            class={`signal-chip ${signal.ok ? 'ok' : 'warn'} ${expandedSignal === signal.key ? 'active' : ''}`}
+            on:click={() => toggleSignalDetail(signal.key)}
+            aria-expanded={expandedSignal === signal.key}
+          >
+            <span class="chip-label">{signal.ok ? '✅' : '⚠️'} {meta.label}</span>
+            {#if expandedSignal === signal.key}
+              {#if meta.description}<p class="chip-detail">{meta.description}</p>{/if}
+              {#if signal.info}<p class="chip-context subtle">{signal.info}</p>{/if}
+            {:else}
+              {#if signal.info}<small>{signal.info}</small>{/if}
+            {/if}
+          </button>
         {/each}
       </div>
 
