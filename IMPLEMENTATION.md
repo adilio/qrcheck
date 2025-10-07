@@ -47,7 +47,7 @@ qrcheck/
       heuristics.ts
       api.ts
   mocks/
-    api-mock.ts
+    api-mock.js
   contracts/
     resolve.schema.json
     intel.schema.json
@@ -554,7 +554,7 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   use: { headless: true, baseURL: 'http://localhost:5173' },
   webServer: [
-    { command: 'node mocks/api-mock.ts', port: 9090, reuseExistingServer: !process.env.CI },
+    { command: 'node mocks/api-mock.js', port: 9090, reuseExistingServer: !process.env.CI },
     { command: 'VITE_API_BASE=http://localhost:9090 VITE_DEV_MANUAL_URL=true npm run dev', port: 5173, reuseExistingServer: !process.env.CI }
   ],
   testDir: 'tests/e2e',
@@ -661,7 +661,7 @@ module.exports = {
 
 ### Mock API
 
-`mocks/api-mock.ts`
+`mocks/api-mock.js`
 
 ```ts
 import http from "http";
@@ -789,7 +789,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
       - run: npm ci
-      - run: node mocks/api-mock.ts &
+      - run: node mocks/api-mock.js &
       - run: sleep 2
       - run: npm run ci:verify
         env:

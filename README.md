@@ -15,7 +15,7 @@ qrcheck/
   README.md            ← You are here
   src/                 ← Svelte SPA (App, heuristics, decode, API helpers)
   public/              ← Static assets (manifest, icons)
-  mocks/api-mock.ts    ← Deterministic intel/resolve mock server
+  mocks/api-mock.js    ← Deterministic intel/resolve mock server
   tests/               ← Vitest unit + Playwright E2E + fixtures
   contracts/           ← JSON schemas for backend responses
   api/                 ← Go HTTP API (resolve + intel handlers)
@@ -29,7 +29,7 @@ qrcheck/
    ```
 2. **Run the mock API** (new terminal):
    ```bash
-   node mocks/api-mock.ts
+   node mocks/api-mock.js
    ```
    - Provide `MOCK_HTTPS_CERT`/`MOCK_HTTPS_KEY` (and optional `MOCK_PORT`) when you need HTTPS for mobile camera testing.
 3. **Launch the dev server**:

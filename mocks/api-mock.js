@@ -6,7 +6,8 @@ const port = Number(process.env.MOCK_PORT || 9090);
 const certPath = process.env.MOCK_HTTPS_CERT;
 const keyPath = process.env.MOCK_HTTPS_KEY;
 
-const handler: http.RequestListener = (req, res) => {
+/** @type {http.RequestListener} */
+const handler = (req, res) => {
   const url = new URL(req.url || '', 'http://localhost');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
