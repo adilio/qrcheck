@@ -399,10 +399,6 @@
     expandedSignal = expandedSignal === key ? null : key;
   }
 
-  function closeSignalDetail() {
-    expandedSignal = null;
-  }
-
   function getSignalMeta(key: string) {
     return signalMeta[key] ?? { label: key, description: '' };
   }
@@ -670,30 +666,24 @@
       <div class="signals">
         {#each result.signals as signal}
           {@const meta = getSignalMeta(signal.key)}
-          <div class={`signal-chip-container ${signal.ok ? 'ok' : 'warn'} ${expandedSignal === signal.key ? 'active' : ''}`}>
-            <button
-              type="button"
-              class="signal-chip"
-              on:click={() => toggleSignalDetail(signal.key)}
-              aria-expanded={expandedSignal === signal.key}
-              aria-controls={`signal-detail-${signal.key}`}
-            >
-              <span class="chip-label">{signal.ok ? '✅' : '⚠️'} {meta.label}</span>
-              <span class="chip-hint">{expandedSignal === signal.key ? 'Hide details' : 'Tap for details'}</span>
-              {#if signal.info && expandedSignal !== signal.key}
-                <small class="chip-summary">{signal.info}</small>
-              {/if}
-            </button>
+          <button
+            type="button"
+            class={`signal-chip ${signal.ok ? 'ok' : 'warn'} ${expandedSignal === signal.key ? 'active' : ''}`}
+            on:click={() => toggleSignalDetail(signal.key)}
+            aria-expanded={expandedSignal === signal.key}
+            aria-controls={`signal-detail-${signal.key}`}
+          >
+            <span class="chip-label">{signal.ok ? '✅' : '⚠️'} {meta.label}</span>
+            <span class="chip-hint">{expandedSignal === signal.key ? 'Tap to collapse' : 'Tap for details'}</span>
             {#if expandedSignal === signal.key}
               <div class="chip-detail-card" role="region" id={`signal-detail-${signal.key}`}>
-                <div class="chip-detail-body">
-                  {#if meta.description}<p class="chip-detail">{meta.description}</p>{/if}
-                  {#if signal.info}<p class="chip-context subtle">Observed: {signal.info}</p>{/if}
-                </div>
-                <button type="button" class="chip-close" on:click|stopPropagation={closeSignalDetail}>Close</button>
+                {#if meta.description}<p class="chip-detail">{meta.description}</p>{/if}
+                {#if signal.info}<p class="chip-context subtle">Observed: {signal.info}</p>{/if}
               </div>
+            {:else if signal.info}
+              <small class="chip-summary">{signal.info}</small>
             {/if}
-          </div>
+          </button>
         {/each}
       </div>
 

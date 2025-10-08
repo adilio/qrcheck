@@ -379,7 +379,8 @@ input:disabled {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
-.signal-chip-container {
+.signal-chip {
+  all: unset;
   border-radius: 1rem;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(5, 8, 20, 0.45);
@@ -387,36 +388,27 @@ input:disabled {
   padding: 1rem;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: 0.75rem;
+  align-items: center;
+  gap: 0.65rem;
+  cursor: pointer;
+  text-align: center;
 }
 
-.signal-chip-container.ok {
+.signal-chip.ok {
   border-color: rgba(48, 252, 196, 0.4);
 }
 
-.signal-chip-container.warn {
+.signal-chip.warn {
   border-color: rgba(255, 120, 120, 0.45);
 }
 
-.signal-chip-container:hover {
+.signal-chip:hover {
   transform: translateY(-1px);
   box-shadow: 0 14px 28px rgba(10, 16, 40, 0.32);
 }
 
-.signal-chip-container.active {
+.signal-chip.active {
   box-shadow: 0 20px 38px rgba(18, 28, 60, 0.45);
-}
-
-.signal-chip {
-  all: unset;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.4rem;
-  width: 100%;
-  cursor: pointer;
-  text-align: center;
 }
 
 .signal-chip:focus-visible {
@@ -449,11 +441,7 @@ input:disabled {
   display: grid;
   gap: 0.7rem;
   padding: 0.85rem 0.95rem 0.9rem;
-}
-
-.chip-detail-body {
-  display: grid;
-  gap: 0.55rem;
+  width: 100%;
 }
 
 .chip-detail {
@@ -466,22 +454,6 @@ input:disabled {
   margin: 0;
   font-size: 0.75rem;
   color: rgba(210, 214, 246, 0.78);
-}
-
-.chip-close {
-  justify-self: start;
-  background: rgba(255, 255, 255, 0.14);
-  color: rgba(230, 236, 255, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 999px;
-  padding: 0.35rem 0.95rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.chip-close:hover {
-  background: rgba(255, 255, 255, 0.18);
 }
 
 .legend {
