@@ -399,11 +399,22 @@
     expandedSignal = expandedSignal === key ? null : key;
   }
 
+  function closeSignalDetail() {
+    expandedSignal = null;
+  }
+
   function getSignalMeta(key: string) {
     return signalMeta[key] ?? { label: key, description: '' };
   }
 
   function handleGlobalKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+      if (expandedSignal) {
+        expandedSignal = null;
+        event.stopPropagation();
+      }
+      return;
+    }
     if (event.key !== 'Enter') return;
     const target = event.target as HTMLElement | null;
     if (target) {
@@ -561,7 +572,7 @@
 
   <section class="grid">
     <section class="panel camera-panel">
-      <h2>Scan with camera</h2>
+      <h2>Scan with Camera</h2>
       {#if !scanning}
         <div class="camera-cta-wrapper">
           <button
@@ -571,7 +582,7 @@
             bind:this={cameraButton}
             type="button"
           >
-            Open camera
+            Open Camera
           </button>
           <p class="muted subtle camera-note">Press Enter or tap the button to start scanning instantly. Requires HTTPS on mobile.</p>
         </div>
@@ -587,8 +598,8 @@
       {#if cameraError}<p class="error">{cameraError}</p>{/if}
     </section>
 
-    <section class="panel">
-      <h2>Upload or drop</h2>
+    <section class="panel upload-panel">
+      <h2>Upload or Drop</h2>
       <div
         class={`dropzone ${dropActive ? 'active' : ''}`}
         role="region"
@@ -598,7 +609,7 @@
         on:dragleave={onDragLeave}
         on:drop|preventDefault={onDrop}
       >
-        <p><span>📎</span> Drag & drop a QR image here</p>
+        <p><span>📎</span> Drag & Drop a QR image here</p>
         <label class="file-trigger">
           <input
             type="file"
@@ -654,23 +665,37 @@
 
       <p class="dest-url">{result.normalized}</p>
 
+      <p class="signal-help subtle">Tap a signal to learn why it matters.</p>
+
       <div class="signals">
         {#each result.signals as signal}
           {@const meta = getSignalMeta(signal.key)}
-          <button
-            type="button"
-            class={`signal-chip ${signal.ok ? 'ok' : 'warn'} ${expandedSignal === signal.key ? 'active' : ''}`}
-            on:click={() => toggleSignalDetail(signal.key)}
-            aria-expanded={expandedSignal === signal.key}
-          >
-            <span class="chip-label">{signal.ok ? '✅' : '⚠️'} {meta.label}</span>
+          <div class={`signal-chip-container ${signal.ok ? 'ok' : 'warn'} ${expandedSignal === signal.key ? 'active' : ''}`}>
+            <button
+              type="button"
+              class="signal-chip"
+              on:click={() => toggleSignalDetail(signal.key)}
+              aria-expanded={expandedSignal === signal.key}
+              aria-controls={`signal-detail-${signal.key}`}
+            >
+              <span class="chip-label">{signal.ok ? '✅' : '⚠️'} {meta.label}</span>
+              <span class="chip-hint">
+                {expandedSignal === signal.key ? 'Hide details' : 'Tap for details'}
+              </span>
+              {#if signal.info && expandedSignal !== signal.key}
+                <small class="chip-summary">{signal.info}</small>
+              {/if}
+            </button>
             {#if expandedSignal === signal.key}
-              {#if meta.description}<p class="chip-detail">{meta.description}</p>{/if}
-              {#if signal.info}<p class="chip-context subtle">{signal.info}</p>{/if}
-            {:else}
-              {#if signal.info}<small>{signal.info}</small>{/if}
+              <div class="chip-popover" role="region" id={`signal-detail-${signal.key}`}>
+                {#if meta.description}<p class="chip-detail">{meta.description}</p>{/if}
+                {#if signal.info}<p class="chip-context subtle">Observed: {signal.info}</p>{/if}
+                <button type="button" class="chip-close" on:click|stopPropagation={closeSignalDetail}>
+                  Close
+                </button>
+              </div>
             {/if}
-          </button>
+          </div>
         {/each}
       </div>
 

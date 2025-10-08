@@ -87,6 +87,18 @@ body[data-theme='light'] {
   padding: 2rem 1.8rem;
 }
 
+.upload-panel {
+  grid-column: 1 / -1;
+}
+
+.camera-panel h2 {
+  font-size: 1.5rem;
+}
+
+.upload-panel h2 {
+  font-size: 1.25rem;
+}
+
 .camera-cta-wrapper {
   display: grid;
   gap: 1rem;
@@ -94,10 +106,13 @@ body[data-theme='light'] {
 }
 
 .camera-cta {
-  font-size: 1.15rem;
-  padding: 0.95rem 3.2rem;
+  font-size: 1.3rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-weight: 700;
+  padding: 1.1rem 3.9rem;
   border-radius: 999px;
-  box-shadow: 0 16px 38px rgba(38, 32, 88, 0.45);
+  box-shadow: 0 18px 44px rgba(38, 32, 88, 0.45);
 }
 
 .camera-note {
@@ -351,42 +366,51 @@ input:disabled {
   margin: 0;
 }
 
+.signal-help {
+  margin: 0.6rem 0 0;
+}
+
 .signals {
+  position: relative;
   display: grid;
   gap: 0.75rem;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
-.signal-chip {
-  appearance: none;
-  cursor: pointer;
-  text-align: left;
-  color: inherit;
-  font: inherit;
+.signal-chip-container {
+  position: relative;
   border-radius: 1rem;
-  padding: 0.85rem;
-  display: grid;
-  gap: 0.4rem;
-  align-items: start;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(5, 8, 20, 0.45);
-  transition: border-color 0.2s ease, background 0.2s ease, transform 0.15s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
 }
 
-.signal-chip.ok {
+.signal-chip-container.ok {
   border-color: rgba(48, 252, 196, 0.4);
 }
 
-.signal-chip.warn {
+.signal-chip-container.warn {
   border-color: rgba(255, 120, 120, 0.45);
 }
 
-.signal-chip.active {
-  background: rgba(18, 26, 48, 0.68);
+.signal-chip-container:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(10, 16, 40, 0.32);
 }
 
-.signal-chip:hover {
-  transform: translateY(-1px);
+.signal-chip-container.active {
+  box-shadow: 0 20px 38px rgba(18, 28, 60, 0.45);
+}
+
+.signal-chip {
+  all: unset;
+  display: grid;
+  gap: 0.4rem;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  text-align: left;
+  padding: 0.95rem;
 }
 
 .signal-chip:focus-visible {
@@ -394,20 +418,64 @@ input:disabled {
   outline-offset: 2px;
 }
 
-.signal-chip small {
+.chip-label {
+  font-weight: 600;
+}
+
+.chip-hint {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(207, 214, 255, 0.65);
+}
+
+.chip-summary {
   color: rgba(230, 232, 255, 0.7);
   font-size: 0.75rem;
 }
 
+.chip-popover {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 0.75rem);
+  transform: translateX(-50%);
+  width: min(280px, max(220px, 95%));
+  background: rgba(8, 12, 32, 0.96);
+  border: 1px solid rgba(140, 165, 255, 0.35);
+  border-radius: 1rem;
+  padding: 1rem;
+  display: grid;
+  gap: 0.6rem;
+  box-shadow: 0 22px 50px rgba(15, 20, 48, 0.6);
+  z-index: 5;
+}
+
 .chip-detail {
-  font-size: 0.8rem;
-  color: rgba(225, 228, 255, 0.78);
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(225, 228, 255, 0.9);
 }
 
 .chip-context {
   margin: 0;
   font-size: 0.75rem;
   color: rgba(210, 214, 246, 0.78);
+}
+
+.chip-close {
+  justify-self: start;
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(230, 236, 255, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  padding: 0.35rem 0.9rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chip-close:hover {
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .legend {
@@ -648,33 +716,45 @@ body[data-theme='light'] .dest-url {
   color: #191d36;
 }
 
-body[data-theme='light'] .signal-chip {
+body[data-theme='light'] .signal-chip-container {
   background: rgba(245, 247, 255, 0.92);
   border-color: rgba(38, 52, 120, 0.12);
 }
 
-body[data-theme='light'] .signal-chip.active {
-  background: rgba(226, 232, 255, 0.9);
+body[data-theme='light'] .signal-chip-container.active {
+  box-shadow: 0 24px 42px rgba(120, 140, 200, 0.28);
 }
 
-body[data-theme='light'] .signal-chip.ok {
+body[data-theme='light'] .signal-chip-container.ok {
   border-color: rgba(46, 193, 143, 0.45);
 }
 
-body[data-theme='light'] .signal-chip.warn {
+body[data-theme='light'] .signal-chip-container.warn {
   border-color: rgba(238, 120, 110, 0.55);
 }
 
-body[data-theme='light'] .signal-chip small {
-  color: rgba(75, 82, 115, 0.78);
+body[data-theme='light'] .chip-hint {
+  color: rgba(92, 102, 145, 0.65);
+}
+
+body[data-theme='light'] .chip-popover {
+  background: rgba(246, 248, 255, 0.96);
+  border-color: rgba(86, 108, 180, 0.35);
+  box-shadow: 0 22px 46px rgba(100, 120, 190, 0.32);
 }
 
 body[data-theme='light'] .chip-detail {
-  color: rgba(64, 70, 105, 0.86);
+  color: rgba(42, 52, 92, 0.92);
 }
 
 body[data-theme='light'] .chip-context {
-  color: rgba(84, 92, 130, 0.75);
+  color: rgba(74, 82, 120, 0.78);
+}
+
+body[data-theme='light'] .chip-close {
+  background: rgba(62, 82, 150, 0.12);
+  color: rgba(36, 46, 90, 0.85);
+  border-color: rgba(62, 82, 150, 0.18);
 }
 
 body[data-theme='light'] .legend li {
