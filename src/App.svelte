@@ -112,6 +112,7 @@
   let dropActive = false;
   let clipboardError = '';
   let expandedSignal: string | null = null;
+  let cameraButton: HTMLButtonElement | null = null;
 
   const captureCanvas = document.createElement('canvas');
   const captureCtx = captureCanvas.getContext('2d');
@@ -133,6 +134,10 @@
     }
     applyTheme(theme);
     themeReady = true;
+    window.addEventListener('keydown', handleGlobalKeydown);
+    void tick().then(() => {
+      cameraButton?.focus();
+    });
   });
 
   async function onFile(event: Event) {
@@ -193,6 +198,7 @@
     result = null;
     hops = [];
     intelRes = null;
+    expandedSignal = null;
   }
 
   async function runAnalysis(raw: string) {
@@ -374,6 +380,9 @@
 
   onDestroy(() => {
     stopCameraScan();
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('keydown', handleGlobalKeydown);
+    }
   });
 
   function applyTheme(next: Theme) {
@@ -392,6 +401,23 @@
 
   function getSignalMeta(key: string) {
     return signalMeta[key] ?? { label: key, description: '' };
+  }
+
+  function handleGlobalKeydown(event: KeyboardEvent) {
+    if (event.key !== 'Enter') return;
+    const target = event.target as HTMLElement | null;
+    if (target) {
+      const tag = target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'BUTTON' || tag === 'SELECT' || tag === 'A') {
+        return;
+      }
+      if (target.isContentEditable) {
+        return;
+      }
+    }
+    if (scanning || busy) return;
+    event.preventDefault();
+    void startCameraScan();
   }
 
   function buildIntelCards(data: IntelResponse | null): IntelCard[] {
@@ -534,19 +560,27 @@
   </header>
 
   <section class="grid">
-    <section class="panel">
+    <section class="panel camera-panel">
       <h2>Scan with camera</h2>
       {#if !scanning}
-        <div class="panel-actions">
-          <button class="primary" on:click={startCameraScan} disabled={busy}>Open camera</button>
-          <span class="muted subtle">Requires HTTPS on mobile. Nothing leaves your device.</span>
+        <div class="camera-cta-wrapper">
+          <button
+            class="primary camera-cta"
+            on:click={() => void startCameraScan()}
+            disabled={busy}
+            bind:this={cameraButton}
+            type="button"
+          >
+            Open camera
+          </button>
+          <p class="muted subtle camera-note">Press Enter or tap the button to start scanning instantly. Requires HTTPS on mobile.</p>
         </div>
       {:else}
         <div class="camera-feed">
           <video bind:this={videoEl} autoplay playsinline muted></video>
         </div>
-        <div class="panel-actions">
-          <button class="secondary" on:click={stopCameraScan}>Stop camera</button>
+        <div class="panel-actions camera-actions">
+          <button class="secondary" on:click={stopCameraScan} type="button">Stop camera</button>
           <span class="muted subtle">Align the QR code inside the frame for auto-detect.</span>
         </div>
       {/if}
