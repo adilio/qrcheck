@@ -679,20 +679,18 @@
               aria-controls={`signal-detail-${signal.key}`}
             >
               <span class="chip-label">{signal.ok ? '✅' : '⚠️'} {meta.label}</span>
-              <span class="chip-hint">
-                {expandedSignal === signal.key ? 'Hide details' : 'Tap for details'}
-              </span>
+              <span class="chip-hint">{expandedSignal === signal.key ? 'Hide details' : 'Tap for details'}</span>
               {#if signal.info && expandedSignal !== signal.key}
                 <small class="chip-summary">{signal.info}</small>
               {/if}
             </button>
             {#if expandedSignal === signal.key}
-              <div class="chip-popover" role="region" id={`signal-detail-${signal.key}`}>
-                {#if meta.description}<p class="chip-detail">{meta.description}</p>{/if}
-                {#if signal.info}<p class="chip-context subtle">Observed: {signal.info}</p>{/if}
-                <button type="button" class="chip-close" on:click|stopPropagation={closeSignalDetail}>
-                  Close
-                </button>
+              <div class="chip-detail-card" role="region" id={`signal-detail-${signal.key}`}>
+                <div class="chip-detail-body">
+                  {#if meta.description}<p class="chip-detail">{meta.description}</p>{/if}
+                  {#if signal.info}<p class="chip-context subtle">Observed: {signal.info}</p>{/if}
+                </div>
+                <button type="button" class="chip-close" on:click|stopPropagation={closeSignalDetail}>Close</button>
               </div>
             {/if}
           </div>
