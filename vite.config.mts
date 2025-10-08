@@ -1,18 +1,10 @@
 import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 
-const repoBase = (() => {
-  if (process.env.QRCHECK_BASE) return process.env.QRCHECK_BASE;
-  if (process.env.GITHUB_REPOSITORY) {
-    const [, repoName] = process.env.GITHUB_REPOSITORY.split('/');
-    if (repoName) return `/${repoName}/`;
-  }
-  if (process.env.GITHUB_ACTIONS) return '/qrcheck/';
-  return '/';
-})();
+const repoBase = process.env.QRCHECK_BASE ?? '/qrcheck/';
 
-export default defineConfig(({ mode }) => ({
-  base: mode === 'production' ? repoBase : '/',
+export default defineConfig(({ command }) => ({
+  base: command === 'build' ? repoBase : '/',
   plugins: [svelte()],
   build: { outDir: 'dist', sourcemap: true }
 }));
