@@ -24,8 +24,6 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-        env:
-          QRCHECK_BASE: /qrcheck/
       - run: touch dist/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:
@@ -47,3 +45,5 @@ jobs:
             https://api.github.com/repos/${GITHUB_REPOSITORY}/pages \
             -d '{"build_type":"workflow"}'
       - uses: actions/deploy-pages@v4
+        with:
+          cname: qrcheck.ca
