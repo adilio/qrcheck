@@ -610,7 +610,6 @@
           <input
             type="file"
             accept="image/*"
-            capture="environment"
             on:change={onFile}
             disabled={busy}
           />
@@ -678,7 +677,7 @@
               <span class="chip-hint">{expandedSignal === signal.key ? 'Tap to collapse' : 'Tap for details'}</span>
             </div>
             {#if expandedSignal === signal.key}
-              <div class="chip-detail-card" role="region" id={`signal-detail-${signal.key}`}>
+              <div class="chip-detail-panel" role="region" id={`signal-detail-${signal.key}`}>
                 {#if meta.description}<p class="chip-detail">{meta.description}</p>{/if}
                 {#if signal.info}<p class="chip-context subtle">Observed: {signal.info}</p>{/if}
               </div>
