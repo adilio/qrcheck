@@ -395,7 +395,11 @@
     theme = theme === 'dark' ? 'light' : 'dark';
   }
 
-  function toggleSignalDetail(key: string) {
+  function toggleSignalDetail(key: string | null) {
+    if (key === null) {
+      expandedSignal = null;
+      return;
+    }
     expandedSignal = expandedSignal === key ? null : key;
   }
 
@@ -668,25 +672,37 @@
           <button
             type="button"
             class={`signal-chip ${signal.ok ? 'ok' : 'warn'} ${expandedSignal === signal.key ? 'active' : ''}`}
-            on:click={() => toggleSignalDetail(signal.key)}
+            on:click={() => toggleSignalDetail(expandedSignal === signal.key ? null : signal.key)}
             aria-expanded={expandedSignal === signal.key}
             aria-controls={`signal-detail-${signal.key}`}
           >
-            <div class="chip-header">
-              <span class="chip-label">{signal.ok ? '✅' : '⚠️'} {meta.label}</span>
-              <span class="chip-hint">{expandedSignal === signal.key ? 'Tap to collapse' : 'Tap for details'}</span>
-            </div>
-            {#if expandedSignal === signal.key}
-              <div class="chip-detail-panel" role="region" id={`signal-detail-${signal.key}`}>
-                {#if meta.description}<p class="chip-detail">{meta.description}</p>{/if}
-                {#if signal.info}<p class="chip-context subtle">Observed: {signal.info}</p>{/if}
-              </div>
-            {:else if signal.info}
+            <span class="chip-label">{signal.ok ? '✅' : '⚠️'} {meta.label}</span>
+            <span class="chip-hint">{expandedSignal === signal.key ? 'Tap to collapse' : 'Tap for details'}</span>
+            {#if signal.info && expandedSignal !== signal.key}
               <small class="chip-summary">{signal.info}</small>
             {/if}
           </button>
         {/each}
       </div>
+
+      {#if expandedSignal}
+        {@const meta = getSignalMeta(expandedSignal)}
+        {@const activeSignal = result.signals.find((s) => s.key === expandedSignal)}
+        <div class="signal-overlay" role="dialog" aria-modal="true" on:click={() => toggleSignalDetail(null)}>
+          <div class="signal-overlay-card" on:click|stopPropagation>
+            <header class="signal-overlay-header">
+              <span class="signal-overlay-label">{meta.label}</span>
+              <button type="button" class="signal-overlay-close" on:click={() => toggleSignalDetail(null)} aria-label="Close signal details">×</button>
+            </header>
+            <div class="signal-overlay-body">
+              {#if meta.description}<p class="chip-detail">{meta.description}</p>{/if}
+              {#if activeSignal?.info}
+                <p class="chip-context subtle">Observed: {activeSignal.info}</p>
+              {/if}
+            </div>
+          </div>
+        </div>
+      {/if}
 
       <details class="legend">
         <summary>How we score safety</summary>

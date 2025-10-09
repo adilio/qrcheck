@@ -285,6 +285,8 @@ input:disabled {
   gap: 1.5rem;
   color: #fdfdff;
   box-shadow: 0 35px 80px rgba(12, 8, 32, 0.6);
+  position: relative;
+  overflow: hidden;
 }
 
 .verdict-card.safe {
@@ -380,25 +382,51 @@ input:disabled {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
-.signal-chip {
+ .signal-chip {
   all: unset;
-  border-radius: 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(5, 8, 20, 0.45);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
-  padding: 1.1rem 1rem;
+  position: relative;
+  border-radius: 1.1rem;
+  border: 1px solid rgba(110, 150, 255, 0.2);
+  background: rgba(12, 16, 36, 0.42);
+  padding: 1.05rem 1.1rem;
+  min-height: 148px;
   display: grid;
   gap: 0.6rem;
   justify-items: center;
   cursor: pointer;
   text-align: center;
-  min-height: 160px;
-  position: relative;
+  backdrop-filter: blur(18px) saturate(180%);
+  transition: border-color 0.2s ease, box-shadow 0.25s ease, transform 0.2s ease;
   overflow: hidden;
 }
 
+.signal-chip::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(130, 196, 255, 0.28), rgba(70, 90, 210, 0.12));
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.signal-chip::after {
+  content: '';
+  position: absolute;
+  inset: 0.14rem;
+  border-radius: 1rem;
+  background: radial-gradient(circle at 22% 18%, rgba(255, 255, 255, 0.22), transparent 55%),
+    rgba(10, 14, 30, 0.55);
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.signal-chip > * {
+  position: relative;
+  z-index: 1;
+}
+
 .signal-chip.ok {
-  border-color: rgba(48, 252, 196, 0.4);
+  border-color: rgba(90, 250, 210, 0.42);
 }
 
 @media (max-width: 720px) {
@@ -479,28 +507,28 @@ input:disabled {
   }
 }
 
+
 .signal-chip.warn {
-  border-color: rgba(255, 120, 120, 0.45);
+  border-color: rgba(255, 150, 150, 0.45);
 }
 
 .signal-chip:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 14px 28px rgba(10, 16, 40, 0.32);
+  transform: translateY(-4px);
+  box-shadow: 0 26px 48px rgba(10, 16, 40, 0.45);
 }
 
 .signal-chip.active {
-  box-shadow: 0 20px 38px rgba(18, 28, 60, 0.45);
+  border-color: rgba(170, 200, 255, 0.75);
+  box-shadow: 0 34px 68px rgba(12, 20, 60, 0.6);
+}
+
+.signal-chip.active::after {
+  opacity: 0.85;
 }
 
 .signal-chip:focus-visible {
   outline: 2px solid rgba(156, 206, 255, 0.6);
   outline-offset: 2px;
-}
-
-.chip-header {
-  display: grid;
-  gap: 0.35rem;
-  justify-items: center;
 }
 
 .chip-label {
@@ -520,30 +548,72 @@ input:disabled {
   font-size: 0.75rem;
 }
 
-.chip-detail-panel {
-  position: absolute;
-  inset: 0.7rem;
-  border-radius: 0.85rem;
-  border: 1px solid rgba(140, 165, 255, 0.45);
-  background: rgba(10, 16, 36, 0.9);
-  box-shadow: 0 18px 36px rgba(12, 16, 40, 0.5);
-  display: grid;
-  gap: 0.65rem;
-  padding: 0.85rem 0.95rem;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(8px);
-  transition: opacity 0.18s ease, transform 0.18s ease;
-}
-
-.signal-chip.active .chip-detail-panel {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateY(0);
-}
-
 .signal-chip.active .chip-summary {
   display: none;
+}
+
+.signal-chip.active .chip-hint {
+  color: rgba(210, 220, 255, 0.85);
+}
+
+.signal-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(1.6rem, 4vw, 2.6rem);
+  background: rgba(6, 10, 24, 0.45);
+  backdrop-filter: blur(22px) saturate(150%);
+  animation: fadeIn 0.18s ease;
+  z-index: 10;
+}
+
+.signal-overlay-card {
+  background: rgba(20, 26, 48, 0.62);
+  border: 1px solid rgba(150, 190, 255, 0.3);
+  box-shadow: 0 40px 80px rgba(6, 10, 26, 0.55);
+  border-radius: 1.4rem;
+  padding: clamp(1.6rem, 3vw, 2rem);
+  max-width: 520px;
+  width: min(520px, 100%);
+  display: grid;
+  gap: 0.9rem;
+  position: relative;
+}
+
+.signal-overlay-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.signal-overlay-label {
+  font-size: 1.05rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.signal-overlay-close {
+  border: none;
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(235, 240, 255, 0.9);
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.signal-overlay-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.signal-overlay-body {
+  display: grid;
+  gap: 0.75rem;
 }
 
 .chip-detail {
@@ -796,20 +866,20 @@ body[data-theme='light'] .dest-url {
   color: #191d36;
 }
 
-body[data-theme='light'] .signal-chip-container {
+body[data-theme='light'] .signal-chip {
   background: rgba(245, 247, 255, 0.92);
   border-color: rgba(38, 52, 120, 0.12);
 }
 
-body[data-theme='light'] .signal-chip-container.active {
+body[data-theme='light'] .signal-chip.active {
   box-shadow: 0 24px 42px rgba(120, 140, 200, 0.28);
 }
 
-body[data-theme='light'] .signal-chip-container.ok {
+body[data-theme='light'] .signal-chip.ok {
   border-color: rgba(46, 193, 143, 0.45);
 }
 
-body[data-theme='light'] .signal-chip-container.warn {
+body[data-theme='light'] .signal-chip.warn {
   border-color: rgba(238, 120, 110, 0.55);
 }
 
@@ -821,10 +891,15 @@ body[data-theme='light'] .chip-summary {
   color: rgba(82, 88, 125, 0.75);
 }
 
-body[data-theme='light'] .chip-detail-panel {
+body[data-theme='light'] .signal-overlay-card {
   background: rgba(246, 248, 255, 0.96);
   border-color: rgba(86, 108, 180, 0.35);
   box-shadow: 0 22px 46px rgba(100, 120, 190, 0.32);
+}
+
+body[data-theme='light'] .signal-overlay-close {
+  background: rgba(70, 90, 160, 0.18);
+  color: rgba(35, 44, 88, 0.85);
 }
 
 body[data-theme='light'] .chip-detail {
@@ -833,12 +908,6 @@ body[data-theme='light'] .chip-detail {
 
 body[data-theme='light'] .chip-context {
   color: rgba(74, 82, 120, 0.78);
-}
-
-body[data-theme='light'] .chip-close {
-  background: rgba(62, 82, 150, 0.12);
-  color: rgba(36, 46, 90, 0.85);
-  border-color: rgba(62, 82, 150, 0.18);
 }
 
 body[data-theme='light'] .legend li {
@@ -887,4 +956,13 @@ body[data-theme='light'] .intel-detail {
 
 body[data-theme='light'] .footer {
   color: rgba(70, 74, 100, 0.8);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
