@@ -697,9 +697,7 @@
             on:click={() => toggleSignalDetail(signal.key)}
             aria-expanded={expandedSignal === signal.key}
             aria-controls={`signal-detail-${signal.key}`}
-            bind:this={(el) => {
-              signalRefs[signal.key] = el;
-            }}
+            bind:this={signalRefs[signal.key]}
           >
             <span class="chip-label">{signal.ok ? '✅' : '⚠️'} {meta.label}</span>
             <span class="chip-hint">{expandedSignal === signal.key ? 'Tap to collapse' : 'Tap for details'}</span>
