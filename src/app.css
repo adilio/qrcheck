@@ -384,49 +384,23 @@ input:disabled {
 
  .signal-chip {
   all: unset;
-  position: relative;
-  border-radius: 1.1rem;
-  border: 1px solid rgba(110, 150, 255, 0.2);
-  background: rgba(12, 16, 36, 0.42);
-  padding: 1.05rem 1.1rem;
-  min-height: 148px;
-  display: grid;
-  gap: 0.6rem;
-  justify-items: center;
+  border-radius: 0.95rem;
+  border: 1px solid rgba(120, 160, 255, 0.22);
+  background: rgba(14, 18, 36, 0.55);
+  padding: 0.85rem 0.95rem;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
   cursor: pointer;
   text-align: center;
-  backdrop-filter: blur(18px) saturate(180%);
-  transition: border-color 0.2s ease, box-shadow 0.25s ease, transform 0.2s ease;
-  overflow: hidden;
-}
-
-.signal-chip::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, rgba(130, 196, 255, 0.28), rgba(70, 90, 210, 0.12));
-  opacity: 0.55;
-  pointer-events: none;
-}
-
-.signal-chip::after {
-  content: '';
-  position: absolute;
-  inset: 0.14rem;
-  border-radius: 1rem;
-  background: radial-gradient(circle at 22% 18%, rgba(255, 255, 255, 0.22), transparent 55%),
-    rgba(10, 14, 30, 0.55);
-  pointer-events: none;
-  transition: opacity 0.2s ease;
-}
-
-.signal-chip > * {
-  position: relative;
-  z-index: 1;
+  backdrop-filter: blur(12px) saturate(160%);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
 }
 
 .signal-chip.ok {
-  border-color: rgba(90, 250, 210, 0.42);
+  border-color: rgba(90, 235, 195, 0.35);
 }
 
 @media (max-width: 720px) {
@@ -556,51 +530,14 @@ input:disabled {
   color: rgba(210, 220, 255, 0.85);
 }
 
-.signal-popover {
-  position: fixed;
-  z-index: 110;
-  background: rgba(16, 20, 40, 0.82);
-  border: 1px solid rgba(150, 188, 255, 0.35);
-  border-radius: 1.2rem;
-  box-shadow: 0 28px 60px rgba(8, 12, 38, 0.55);
-  backdrop-filter: blur(22px) saturate(160%);
-  padding: 1.2rem 1.3rem;
+.chip-detail-panel {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(140, 180, 255, 0.25);
+  background: rgba(18, 24, 52, 0.58);
+  padding: 0.75rem 0.85rem;
   display: grid;
-  gap: 0.9rem;
-  animation: fadeIn 0.18s ease;
-}
-
-.signal-popover-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.signal-popover-title {
-  font-size: 1.05rem;
-  font-weight: 650;
-}
-
-.signal-popover-close {
-  border: none;
-  background: rgba(255, 255, 255, 0.12);
-  color: rgba(235, 240, 255, 0.9);
-  width: 32px;
-  height: 32px;
-  border-radius: 999px;
-  font-size: 1.1rem;
-  cursor: pointer;
-  transition: background 0.2s ease;
-}
-
-.signal-popover-close:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.signal-popover-body {
-  display: grid;
-  gap: 0.75rem;
+  gap: 0.6rem;
 }
 
 .chip-detail {
@@ -854,39 +791,33 @@ body[data-theme='light'] .dest-url {
 }
 
 body[data-theme='light'] .signal-chip {
-  background: rgba(245, 247, 255, 0.92);
-  border-color: rgba(38, 52, 120, 0.12);
+  background: rgba(248, 250, 255, 0.94);
+  border-color: rgba(42, 56, 120, 0.14);
 }
 
 body[data-theme='light'] .signal-chip.active {
-  box-shadow: 0 24px 42px rgba(120, 140, 200, 0.28);
+  box-shadow: 0 18px 32px rgba(110, 130, 200, 0.22);
 }
 
 body[data-theme='light'] .signal-chip.ok {
-  border-color: rgba(46, 193, 143, 0.45);
+  border-color: rgba(56, 190, 150, 0.4);
 }
 
 body[data-theme='light'] .signal-chip.warn {
-  border-color: rgba(238, 120, 110, 0.55);
+  border-color: rgba(238, 120, 110, 0.45);
 }
 
 body[data-theme='light'] .chip-hint {
-  color: rgba(92, 102, 145, 0.65);
+  color: rgba(90, 100, 135, 0.65);
 }
 
 body[data-theme='light'] .chip-summary {
-  color: rgba(82, 88, 125, 0.75);
+  color: rgba(82, 90, 125, 0.75);
 }
 
-body[data-theme='light'] .signal-popover {
-  background: rgba(246, 248, 255, 0.96);
-  border-color: rgba(86, 108, 180, 0.35);
-  box-shadow: 0 22px 46px rgba(100, 120, 190, 0.32);
-}
-
-body[data-theme='light'] .signal-popover-close {
-  background: rgba(70, 90, 160, 0.18);
-  color: rgba(35, 44, 88, 0.85);
+body[data-theme='light'] .chip-detail-panel {
+  background: rgba(247, 249, 255, 0.96);
+  border-color: rgba(96, 118, 190, 0.22);
 }
 
 body[data-theme='light'] .chip-detail {
