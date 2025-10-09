@@ -32,8 +32,8 @@ body[data-theme='light'] {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2rem;
-  padding: 4rem 1.5rem 3rem;
+  gap: clamp(1.8rem, 4vw, 2.5rem);
+  padding: clamp(2.5rem, 7vw, 4rem) clamp(1rem, 4vw, 2rem) clamp(2rem, 6vw, 3rem);
 }
 
 .hero {
@@ -106,14 +106,15 @@ body[data-theme='light'] {
 }
 
 .camera-cta {
-  font-size: 1.35rem;
-  letter-spacing: 0.06em;
+  font-size: clamp(1.4rem, 7vw, 2.4rem);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   font-weight: 700;
-  padding: 1.2rem 3.9rem;
+  line-height: 1.05;
+  padding: clamp(1rem, 4vw, 1.5rem) clamp(2.5rem, 8vw, 4.2rem);
   border-radius: 999px;
   box-shadow: 0 20px 48px rgba(38, 32, 88, 0.45);
-  width: min(480px, 96%);
+  width: min(500px, 96%);
   max-width: 100%;
 }
 
@@ -385,17 +386,94 @@ input:disabled {
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(5, 8, 20, 0.45);
   transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
-  padding: 1rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.65rem;
+  padding: 0.9rem;
+  display: grid;
+  gap: 0.5rem;
+  justify-items: center;
   cursor: pointer;
   text-align: center;
 }
 
 .signal-chip.ok {
   border-color: rgba(48, 252, 196, 0.4);
+}
+
+@media (max-width: 720px) {
+  body {
+    background-attachment: scroll;
+  }
+
+  .hero {
+    max-width: 100%;
+  }
+
+  .page {
+    padding-top: 2.5rem;
+    padding-bottom: 2.5rem;
+  }
+
+  .panel {
+    padding: 1.35rem;
+    border-radius: 1.1rem;
+  }
+
+  .camera-panel {
+    padding: 1.75rem 1.4rem;
+    gap: 1.2rem;
+  }
+
+  .camera-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .camera-actions > * {
+    width: 100%;
+  }
+
+  .input-row {
+    flex-direction: column;
+  }
+
+  .verdict-card {
+    padding: 1.5rem;
+    border-radius: 1.3rem;
+  }
+
+  .verdict-header {
+    align-items: flex-start;
+  }
+
+  .score-bubble {
+    min-width: 72px;
+  }
+
+  .signals {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 420px) {
+  .camera-cta {
+    letter-spacing: 0.05em;
+    padding: 1rem;
+  }
+
+  .hero h1 {
+    font-size: clamp(2rem, 9vw, 2.4rem);
+  }
+
+  .hero p {
+    font-size: 0.95rem;
+  }
+
+  .panel {
+    padding: 1.15rem;
+  }
+
+  .verdict-card {
+    padding: 1.25rem;
+  }
 }
 
 .signal-chip.warn {
@@ -414,6 +492,12 @@ input:disabled {
 .signal-chip:focus-visible {
   outline: 2px solid rgba(156, 206, 255, 0.6);
   outline-offset: 2px;
+}
+
+.chip-header {
+  display: grid;
+  gap: 0.35rem;
+  justify-items: center;
 }
 
 .chip-label {
@@ -440,7 +524,7 @@ input:disabled {
   box-shadow: 0 18px 38px rgba(12, 16, 40, 0.45);
   display: grid;
   gap: 0.7rem;
-  padding: 0.85rem 0.95rem 0.9rem;
+  padding: 0.8rem 0.9rem;
   width: 100%;
 }
 

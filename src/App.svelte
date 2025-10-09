@@ -673,8 +673,10 @@
             aria-expanded={expandedSignal === signal.key}
             aria-controls={`signal-detail-${signal.key}`}
           >
-            <span class="chip-label">{signal.ok ? '✅' : '⚠️'} {meta.label}</span>
-            <span class="chip-hint">{expandedSignal === signal.key ? 'Tap to collapse' : 'Tap for details'}</span>
+            <div class="chip-header">
+              <span class="chip-label">{signal.ok ? '✅' : '⚠️'} {meta.label}</span>
+              <span class="chip-hint">{expandedSignal === signal.key ? 'Tap to collapse' : 'Tap for details'}</span>
+            </div>
             {#if expandedSignal === signal.key}
               <div class="chip-detail-card" role="region" id={`signal-detail-${signal.key}`}>
                 {#if meta.description}<p class="chip-detail">{meta.description}</p>{/if}
