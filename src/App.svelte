@@ -112,6 +112,8 @@
   let dropActive = false;
   let clipboardError = '';
   let expandedSignal: string | null = null;
+  let popoverStyle: { top: string; left: string; width: string } | null = null;
+  const signalRefs: Record<string, HTMLButtonElement | null> = {};
   let cameraButton: HTMLButtonElement | null = null;
 
   const captureCanvas = document.createElement('canvas');
@@ -395,12 +397,32 @@
     theme = theme === 'dark' ? 'light' : 'dark';
   }
 
-  function toggleSignalDetail(key: string | null) {
-    if (key === null) {
+  async function toggleSignalDetail(key: string | null) {
+    if (key === null || expandedSignal === key) {
       expandedSignal = null;
+      popoverStyle = null;
       return;
     }
-    expandedSignal = expandedSignal === key ? null : key;
+    expandedSignal = key;
+    if (typeof window === 'undefined') {
+      popoverStyle = null;
+      return;
+    }
+    await tick();
+    const el = signalRefs[key];
+    if (!el) {
+      popoverStyle = null;
+      return;
+    }
+    const rect = el.getBoundingClientRect();
+    const width = Math.min(340, window.innerWidth - 32);
+    const left = Math.min(Math.max(rect.left + rect.width / 2 - width / 2, 16), window.innerWidth - width - 16);
+    const top = rect.top + rect.height + 14;
+    popoverStyle = {
+      top: `${top}px`,
+      left: `${left}px`,
+      width: `${width}px`
+    };
   }
 
   function getSignalMeta(key: string) {
@@ -410,7 +432,7 @@
   function handleGlobalKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
       if (expandedSignal) {
-        expandedSignal = null;
+        void toggleSignalDetail(null);
         event.stopPropagation();
       }
       return;
@@ -672,9 +694,12 @@
           <button
             type="button"
             class={`signal-chip ${signal.ok ? 'ok' : 'warn'} ${expandedSignal === signal.key ? 'active' : ''}`}
-            on:click={() => toggleSignalDetail(expandedSignal === signal.key ? null : signal.key)}
+            on:click={() => toggleSignalDetail(signal.key)}
             aria-expanded={expandedSignal === signal.key}
             aria-controls={`signal-detail-${signal.key}`}
+            bind:this={(el) => {
+              signalRefs[signal.key] = el;
+            }}
           >
             <span class="chip-label">{signal.ok ? '✅' : '⚠️'} {meta.label}</span>
             <span class="chip-hint">{expandedSignal === signal.key ? 'Tap to collapse' : 'Tap for details'}</span>
@@ -685,21 +710,31 @@
         {/each}
       </div>
 
-      {#if expandedSignal}
+      {#if expandedSignal && popoverStyle}
         {@const meta = getSignalMeta(expandedSignal)}
         {@const activeSignal = result.signals.find((s) => s.key === expandedSignal)}
-        <div class="signal-overlay" role="dialog" aria-modal="true" on:click={() => toggleSignalDetail(null)}>
-          <div class="signal-overlay-card" on:click|stopPropagation>
-            <header class="signal-overlay-header">
-              <span class="signal-overlay-label">{meta.label}</span>
-              <button type="button" class="signal-overlay-close" on:click={() => toggleSignalDetail(null)} aria-label="Close signal details">×</button>
-            </header>
-            <div class="signal-overlay-body">
-              {#if meta.description}<p class="chip-detail">{meta.description}</p>{/if}
-              {#if activeSignal?.info}
-                <p class="chip-context subtle">Observed: {activeSignal.info}</p>
-              {/if}
-            </div>
+        <div
+          class="signal-popover"
+          role="dialog"
+          aria-modal="true"
+          style={`top:${popoverStyle.top};left:${popoverStyle.left};width:${popoverStyle.width};`}
+        >
+          <header class="signal-popover-header">
+            <span class="signal-popover-title">{meta.label}</span>
+            <button
+              type="button"
+              class="signal-popover-close"
+              on:click={() => toggleSignalDetail(null)}
+              aria-label="Close signal details"
+            >
+              ×
+            </button>
+          </header>
+          <div class="signal-popover-body">
+            {#if meta.description}<p class="chip-detail">{meta.description}</p>{/if}
+            {#if activeSignal?.info}
+              <p class="chip-context subtle">Observed: {activeSignal.info}</p>
+            {/if}
           </div>
         </div>
       {/if}

@@ -556,46 +556,33 @@ input:disabled {
   color: rgba(210, 220, 255, 0.85);
 }
 
-.signal-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: clamp(1.6rem, 4vw, 2.6rem);
-  background: rgba(6, 10, 24, 0.45);
-  backdrop-filter: blur(22px) saturate(150%);
-  animation: fadeIn 0.18s ease;
-  z-index: 10;
-}
-
-.signal-overlay-card {
-  background: rgba(20, 26, 48, 0.62);
-  border: 1px solid rgba(150, 190, 255, 0.3);
-  box-shadow: 0 40px 80px rgba(6, 10, 26, 0.55);
-  border-radius: 1.4rem;
-  padding: clamp(1.6rem, 3vw, 2rem);
-  max-width: 520px;
-  width: min(520px, 100%);
+.signal-popover {
+  position: fixed;
+  z-index: 110;
+  background: rgba(16, 20, 40, 0.82);
+  border: 1px solid rgba(150, 188, 255, 0.35);
+  border-radius: 1.2rem;
+  box-shadow: 0 28px 60px rgba(8, 12, 38, 0.55);
+  backdrop-filter: blur(22px) saturate(160%);
+  padding: 1.2rem 1.3rem;
   display: grid;
   gap: 0.9rem;
-  position: relative;
+  animation: fadeIn 0.18s ease;
 }
 
-.signal-overlay-header {
+.signal-popover-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
 }
 
-.signal-overlay-label {
+.signal-popover-title {
   font-size: 1.05rem;
   font-weight: 650;
-  letter-spacing: 0.02em;
 }
 
-.signal-overlay-close {
+.signal-popover-close {
   border: none;
   background: rgba(255, 255, 255, 0.12);
   color: rgba(235, 240, 255, 0.9);
@@ -607,11 +594,11 @@ input:disabled {
   transition: background 0.2s ease;
 }
 
-.signal-overlay-close:hover {
+.signal-popover-close:hover {
   background: rgba(255, 255, 255, 0.2);
 }
 
-.signal-overlay-body {
+.signal-popover-body {
   display: grid;
   gap: 0.75rem;
 }
@@ -891,13 +878,13 @@ body[data-theme='light'] .chip-summary {
   color: rgba(82, 88, 125, 0.75);
 }
 
-body[data-theme='light'] .signal-overlay-card {
+body[data-theme='light'] .signal-popover {
   background: rgba(246, 248, 255, 0.96);
   border-color: rgba(86, 108, 180, 0.35);
   box-shadow: 0 22px 46px rgba(100, 120, 190, 0.32);
 }
 
-body[data-theme='light'] .signal-overlay-close {
+body[data-theme='light'] .signal-popover-close {
   background: rgba(70, 90, 160, 0.18);
   color: rgba(35, 44, 88, 0.85);
 }
