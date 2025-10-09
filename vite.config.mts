@@ -8,14 +8,6 @@ export default defineConfig(({ command }) => ({
   plugins: [svelte()],
   build: {
     outDir: 'dist',
-    sourcemap: true,
-    assetsDir: 'assets',
-    rollupOptions: {
-      output: {
-        entryFileNames: 'assets/app.js',
-        chunkFileNames: 'assets/[name].js',
-        assetFileNames: 'assets/[name][extname]'
-      }
-    }
+    sourcemap: true
   }
 }));

@@ -7,6 +7,24 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" type="image/png" href="/icon-192.png" />
     <title>QRCheck.ca</title>
+    <script>
+      (function () {
+        const PARAM = 'qrcheck-bust';
+        window.addEventListener(
+          'error',
+          (event) => {
+            const target = event.target;
+            if (!target || target.tagName !== 'SCRIPT') return;
+            const src = target.getAttribute('src') || '';
+            if (!src.includes('/assets/')) return;
+            const url = new URL(window.location.href);
+            url.searchParams.set(PARAM, Date.now().toString(36));
+            window.location.replace(url.toString());
+          },
+          true
+        );
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>
