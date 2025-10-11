@@ -143,6 +143,7 @@
   let checksOpen = false;
   let redirectsOpen = false;
   let intelOpen = false;
+  let manualUrlOpen = false;
   let videoEl: HTMLVideoElement | null = null;
   let stream: MediaStream | null = null;
   let scanFrameHandle: number | null = null;
@@ -698,6 +699,11 @@
           📁 Upload
           <input type="file" accept="image/*" on:change={handleEntryFile} style="display: none;" />
         </label>
+        {#if DEV_ENABLE_MANUAL_URL}
+          <button class="secondary manual-btn" type="button" on:click={() => (manualUrlOpen = true)}>
+          Scan or upload QR
+        </button>
+        {/if}
         {#if step && (flow === 'processing' || flow === 'scanning')}
           <span class="status-pill">{step}</span>
         {/if}
@@ -709,6 +715,35 @@
       {/if}
     </div>
   </section>
+
+  {#if manualUrlOpen}
+    <div class="modal-backdrop" role="presentation" on:click={() => (manualUrlOpen = false)} on:keydown={(e) => { if (e.key === 'Escape') manualUrlOpen = false; }} tabindex="-1"></div>
+    <div class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title" tabindex="-1">
+      <div class="modal-content" role="document">
+        <header>
+          <h2 id="modal-title">Scan or upload a QR code</h2>
+          <button class="modal-close" on:click={() => (manualUrlOpen = false)} aria-label="Close modal">✕</button>
+        </header>
+        <div class="modal-body">
+          <p>Enter a URL to analyze:</p>
+          <input
+            type="url"
+            placeholder="https://example.com"
+            bind:value={manualUrl}
+            on:keydown={(e) => { if (e.key === 'Enter') { manualUrlOpen = false; void runManual(); } }}
+          />
+          <div class="modal-actions">
+            <button class="primary" on:click={() => { manualUrlOpen = false; void runManual(); }} disabled={!manualUrl.trim()}>
+              Analyze
+            </button>
+            <button class="secondary" on:click={() => (manualUrlOpen = false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
 
   {#if flow === 'scanning'}
     <section class="camera-card" aria-live="polite">
@@ -1069,5 +1104,103 @@
     font-family: monospace;
     font-size: 0.875rem;
     line-height: 1.4;
+  }
+
+  .manual-btn {
+    min-width: 120px;
+  }
+
+  .modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+  }
+
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1001;
+  }
+
+  .modal-content {
+    background-color: var(--bg-primary);
+    border-radius: 0.5rem;
+    padding: 0;
+    max-width: 500px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  }
+
+  .modal-content header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .modal-content h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    color: var(--text-primary);
+  }
+
+  .modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: var(--text-secondary);
+    padding: 0.25rem;
+    border-radius: 0.25rem;
+    transition: background-color 0.2s;
+  }
+
+  .modal-close:hover {
+    background-color: var(--bg-secondary);
+  }
+
+  .modal-body {
+    padding: 1.5rem;
+  }
+
+  .modal-body p {
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+  }
+
+  .modal-body input {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.25rem;
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .modal-body input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+  }
+
+  .modal-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
   }
 </style>
