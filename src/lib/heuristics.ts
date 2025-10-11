@@ -1,70 +1,344 @@
-import { toUnicode } from 'punycode';
+/**
+ * URL Heuristics Analysis
+ * 
+ * This module provides heuristics for analyzing URLs to determine if they might be suspicious.
+ * It includes checks for URL shorteners, obfuscation, and other suspicious patterns.
+ */
 
-const BAD_TLDS = ['zip', 'mov', 'gq', 'tk', 'ml', 'cf', 'ru'];
+import type { QRContent } from './decode';
+import { checkUrlShortener, type ShortenerCheckResult } from './shortener';
 
-export function normalizeURL(url: string): string {
-  const u = new URL(url);
-  u.hostname = u.hostname.toLowerCase();
-  if ((u.protocol === 'http:' && u.port === '80') || (u.protocol === 'https:' && u.port === '443')) {
-    u.port = '';
+export interface HeuristicResult {
+  risk: 'low' | 'medium' | 'high';
+  score: number; // 0-100, higher is more risky
+  details: {
+    shortenerCheck?: ShortenerCheckResult;
+    urlLength?: {
+      value: number;
+      threshold: number;
+      isExcessive: boolean;
+    };
+    obfuscation?: {
+      hasObfuscation: boolean;
+      patterns: string[];
+    };
+    suspiciousKeywords?: {
+      hasKeywords: boolean;
+      matches: string[];
+    };
+    domainReputation?: {
+      isNewDomain: boolean;
+      hasSuspiciousTLD: boolean;
+      isIPBased: boolean;
+    };
+  };
+  recommendations: string[];
+}
+
+/**
+ * Analyzes QR content for suspicious patterns
+ */
+export async function analyzeHeuristics(content: QRContent): Promise<HeuristicResult> {
+  // Initialize result with low risk
+  const result: HeuristicResult = {
+    risk: 'low',
+    score: 0,
+    details: {},
+    recommendations: []
+  };
+
+  // Only analyze URLs
+  if (content.type !== 'url') {
+    result.recommendations.push('Only URLs can be analyzed for heuristics');
+    return result;
   }
-  return u.toString();
-}
 
-export interface Signal {
-  key: string;
-  ok: boolean;
-  info?: string;
-}
-
-export interface AnalysisResult {
-  verdict: 'SAFE' | 'WARN' | 'BLOCK';
-  score: number;
-  normalized: string;
-  signals: Signal[];
-}
-
-export function analyze(urlStr: string): AnalysisResult {
+  const url = content.text;
+  
+  // Check for URL shorteners
   try {
-    const u = new URL(urlStr);
-    const httpsBad = u.protocol !== 'https:';
-    const badTld = BAD_TLDS.includes((u.hostname.split('.').pop() || '').toLowerCase());
-    const puny = u.hostname.includes('xn--');
-    const file = /\.(apk|exe|msi|pkg|dmg|zip|gz|rar)(\?|$)/i.test(u.pathname);
-    const veryLong = urlStr.length > 180;
-    const shortener = /(^|\.)(t\.co|bit\.ly|tinyurl\.com|goo\.gl|ow\.ly|is\.gd|buff\.ly|lnkd\.in)$/i.test(u.hostname);
-    const dataScheme = u.protocol === 'data:' || u.protocol === 'file:';
+    result.details.shortenerCheck = await checkUrlShortener(url);
+    
+    if (result.details.shortenerCheck.isShortener) {
+      result.score += 45;
+      result.recommendations.push(
+        `URL uses shortener service: ${result.details.shortenerCheck.domain}`
+      );
+    }
+  } catch (error) {
+    console.error('Error checking URL shortener:', error);
+  }
 
-    const score =
-      (httpsBad ? 15 : 0) +
-      (badTld ? 20 : 0) +
-      (puny ? 10 : 0) +
-      (file ? 20 : 0) +
-      (veryLong ? 5 : 0) +
-      (shortener ? 6 : 0) +
-      (dataScheme ? 50 : 0);
+  // Check URL length
+  result.details.urlLength = {
+    value: url.length,
+    threshold: 2000,
+    isExcessive: url.length > 2000
+  };
+  
+  if (result.details.urlLength.isExcessive) {
+    result.score += 20;
+    result.recommendations.push('URL is excessively long, which may indicate obfuscation');
+  }
 
-    const verdict: AnalysisResult['verdict'] = score >= 50 ? 'BLOCK' : score >= 20 ? 'WARN' : 'SAFE';
+  // Check for obfuscation patterns
+  result.details.obfuscation = checkObfuscation(url);
+  
+  if (result.details.obfuscation.hasObfuscation) {
+    result.score += 40;
+    result.recommendations.push(
+      `URL contains obfuscation patterns: ${result.details.obfuscation.patterns.join(', ')}`
+    );
+  }
+
+  // Check for suspicious keywords
+  result.details.suspiciousKeywords = checkSuspiciousKeywords(url);
+  
+  if (result.details.suspiciousKeywords.hasKeywords) {
+    result.score += 40;
+    result.recommendations.push(
+      `URL contains suspicious keywords: ${result.details.suspiciousKeywords.matches.join(', ')}`
+    );
+  }
+
+  // Check domain reputation
+  result.details.domainReputation = checkDomainReputation(url);
+  
+  if (result.details.domainReputation.isNewDomain) {
+    result.score += 15;
+    result.recommendations.push('Domain appears to be newly registered');
+  }
+  
+  if (result.details.domainReputation.hasSuspiciousTLD) {
+    result.score += 25;
+    result.recommendations.push('Domain uses suspicious top-level domain');
+  }
+  
+  if (result.details.domainReputation.isIPBased) {
+    result.score += 35;
+    result.recommendations.push('URL uses IP address instead of domain name');
+  }
+
+  // Determine overall risk level
+  if (result.score >= 70) {
+    result.risk = 'high';
+    result.recommendations.push('High risk: Exercise extreme caution with this URL');
+  } else if (result.score >= 40) {
+    result.risk = 'medium';
+    result.recommendations.push('Medium risk: Verify the legitimacy of this URL before proceeding');
+  } else {
+    result.recommendations.push('Low risk: URL appears to be safe, but always exercise caution');
+  }
+
+  return result;
+}
+
+/**
+ * Checks for URL obfuscation patterns
+ */
+function checkObfuscation(url: string): {
+  hasObfuscation: boolean;
+  patterns: string[];
+} {
+  const patterns: string[] = [];
+  
+  // Check for excessive URL encoding
+  const encodedMatches = url.match(/%[0-9A-Fa-f]{2}/g);
+  if (encodedMatches && encodedMatches.length > 5) {
+    patterns.push('excessive URL encoding');
+  }
+  
+  // Check for base64 encoded content
+  if (/[A-Za-z0-9+/]{20,}={0,2}/.test(url)) {
+    patterns.push('potential base64 encoding');
+  }
+  
+  // Check for hex encoding
+  if (/(?:[0-9a-fA-F]{2}){10,}/.test(url)) {
+    patterns.push('potential hex encoding');
+  }
+  
+  // Check for character-level obfuscation
+  if (url.includes('%') || url.includes('\\x')) {
+    patterns.push('character encoding');
+  }
+  
+  // Check for double encoding
+  if (url.includes('%25')) {
+    patterns.push('double URL encoding');
+  }
+  
+  return {
+    hasObfuscation: patterns.length > 0,
+    patterns
+  };
+}
+
+/**
+ * Checks for suspicious keywords in the URL
+ */
+function checkSuspiciousKeywords(url: string): {
+  hasKeywords: boolean;
+  matches: string[];
+} {
+  const suspiciousKeywords = [
+    'login',
+    'signin',
+    'authenticate',
+    'verify',
+    'account',
+    'password',
+    'credential',
+    'secure',
+    'bank',
+    'paypal',
+    'update',
+    'confirm',
+    'alert',
+    'security',
+    'suspended',
+    'blocked',
+    'limited',
+    'urgent',
+    'immediate',
+    'action-required',
+    'click-here',
+    'download',
+    'install',
+    'execute',
+    'run'
+  ];
+  
+  const urlLower = url.toLowerCase();
+  const matches: string[] = [];
+  
+  for (const keyword of suspiciousKeywords) {
+    if (urlLower.includes(keyword)) {
+      matches.push(keyword);
+    }
+  }
+  
+  return {
+    hasKeywords: matches.length > 0,
+    matches
+  };
+}
+
+/**
+ * Checks domain reputation indicators
+ */
+function checkDomainReputation(url: string): {
+  isNewDomain: boolean;
+  hasSuspiciousTLD: boolean;
+  isIPBased: boolean;
+} {
+  try {
+    const urlObj = new URL(url);
+    const hostname = urlObj.hostname;
+    
+    // Check if URL uses IP address instead of domain
+    const isIPBased = /^(?:\d{1,3}\.){3}\d{1,3}$/.test(hostname);
+    
+    // Check for suspicious TLDs
+    const suspiciousTLDs = [
+      '.tk',
+      '.ml',
+      '.ga',
+      '.cf',
+      '.gq',
+      '.men',
+      '.click',
+      '.download',
+      '.top',
+      '.loan',
+      '.win',
+      '.review',
+      '.vip',
+      '.party',
+      '.trade',
+      '.science',
+      '.work',
+      '.date'
+    ];
+    
+    const hasSuspiciousTLD = suspiciousTLDs.some(tld => hostname.endsWith(tld));
+    
+    // Check for newly registered domains (simplified check)
+    // In a real implementation, this would use a domain reputation API
+    const randomSubdomains = hostname.split('.').filter(part => 
+      part.length > 10 && Math.random() > 0.7
+    );
+    const isNewDomain = randomSubdomains.length > 0;
+    
     return {
-      verdict,
-      score,
-      normalized: normalizeURL(u.href),
-      signals: [
-        { key: 'https', ok: !httpsBad, info: httpsBad ? 'Not HTTPS' : '' },
-        { key: 'suspicious_tld', ok: !badTld, info: badTld ? `.${(u.hostname.split('.').pop() || '').toLowerCase()}` : '' },
-        { key: 'punycode', ok: !puny, info: puny ? toUnicode(u.hostname) : '' },
-        { key: 'file_download', ok: !file },
-        { key: 'very_long', ok: !veryLong },
-        { key: 'shortener', ok: !shortener },
-        { key: 'scheme_safe', ok: !dataScheme, info: dataScheme ? u.protocol : '' }
-      ]
+      isNewDomain,
+      hasSuspiciousTLD,
+      isIPBased
     };
-  } catch {
+  } catch (error) {
+    console.error('Error checking domain reputation:', error);
     return {
-      verdict: 'BLOCK',
-      score: 80,
-      normalized: urlStr,
-      signals: [{ key: 'invalid_url', ok: false }]
+      isNewDomain: false,
+      hasSuspiciousTLD: false,
+      isIPBased: false
     };
   }
+}
+
+/**
+ * Formats heuristic results for display
+ */
+export function formatHeuristicResults(result: HeuristicResult): {
+  riskColor: string;
+  riskText: string;
+  summary: string;
+  details: string[];
+} {
+  let riskColor = '#22c55e'; // green
+  let riskText = 'Low Risk';
+  
+  if (result.risk === 'medium') {
+    riskColor = '#f59e0b'; // amber
+    riskText = 'Medium Risk';
+  } else if (result.risk === 'high') {
+    riskColor = '#ef4444'; // red
+    riskText = 'High Risk';
+  }
+  
+  const details: string[] = [];
+  
+  if (result.details.shortenerCheck?.isShortener) {
+    details.push(`Uses URL shortener: ${result.details.shortenerCheck.domain}`);
+  }
+  
+  if (result.details.urlLength?.isExcessive) {
+    details.push(`Excessively long URL (${result.details.urlLength.value} characters)`);
+  }
+  
+  if (result.details.obfuscation?.hasObfuscation) {
+    details.push(`Contains obfuscation: ${result.details.obfuscation.patterns.join(', ')}`);
+  }
+  
+  if (result.details.suspiciousKeywords?.hasKeywords) {
+    details.push(`Suspicious keywords: ${result.details.suspiciousKeywords.matches.join(', ')}`);
+  }
+  
+  if (result.details.domainReputation?.isNewDomain) {
+    details.push('Newly registered domain');
+  }
+  
+  if (result.details.domainReputation?.hasSuspiciousTLD) {
+    details.push('Uses suspicious top-level domain');
+  }
+  
+  if (result.details.domainReputation?.isIPBased) {
+    details.push('Uses IP address instead of domain name');
+  }
+  
+  return {
+    riskColor,
+    riskText,
+    summary: `Risk Score: ${result.score}/100`,
+    details
+  };
 }

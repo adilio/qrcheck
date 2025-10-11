@@ -1,13 +1,15 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from 'svelte';
   import { DEV_ENABLE_MANUAL_URL } from './lib/flags';
-  import { decodeQRFromFile, decodeQRFromImageData } from './lib/decode';
-  import { analyze, type AnalysisResult } from './lib/heuristics';
+  import { decodeQRFromFile, decodeQRFromImageData, parseQRContent, type QRContent } from './lib/decode';
+  import { analyzeHeuristics, formatHeuristicResults } from './lib/heuristics';
   import { resolveChain, intel, type IntelResponse } from './lib/api';
   import { startCamera, stopCamera } from './lib/camera';
 
-  type VerdictKey = AnalysisResult['verdict'];
+  type VerdictKey = 'SAFE' | 'WARN' | 'BLOCK';
   type IntelStatus = 'clean' | 'warn' | 'block' | 'info' | 'error';
+  type Theme = 'dark' | 'light';
+  type FlowState = 'idle' | 'scanning' | 'processing' | 'complete' | 'error';
 
   interface IntelCard {
     name: string;
@@ -17,23 +19,35 @@
     detail: string;
   }
 
-  const verdictMeta: Record<VerdictKey, { emoji: string; title: string; subtitle: string; tone: string }> = {
+  interface Alert {
+    id: string;
+    tone: 'info' | 'warn' | 'error';
+    message: string;
+    hint?: string;
+  }
+
+  const THEME_KEY = 'qrcheck-theme';
+
+  const verdictMeta: Record<VerdictKey, { emoji: string; heading: string; summary: string; guidance: string; tone: string }> = {
     SAFE: {
-      emoji: '🟢',
-      title: 'Likely Safe',
-      subtitle: 'No major red flags detected.',
+      emoji: '✅',
+      heading: 'Safe',
+      summary: 'Reputable destination',
+      guidance: 'Local checks show no obvious risk indicators.',
       tone: 'safe'
     },
     WARN: {
-      emoji: '🟡',
-      title: 'Proceed Carefully',
-      subtitle: 'Some signals deserve a closer look.',
+      emoji: '⚠️',
+      heading: 'Caution',
+      summary: 'Mixed signals detected',
+      guidance: 'Review the highlighted checks before you proceed.',
       tone: 'warn'
     },
     BLOCK: {
-      emoji: '🔴',
-      title: 'High Risk',
-      subtitle: 'Multiple indicators suggest danger.',
+      emoji: '⛔️',
+      heading: 'High risk',
+      summary: 'Likely malicious destination',
+      guidance: 'Avoid visiting or sharing this link.',
       tone: 'block'
     }
   };
@@ -41,41 +55,59 @@
   const signalMeta: Record<
     string,
     {
-      label: string;
-      description: string;
+      title: string;
+      safe: string;
+      warn: string;
+      learn: string;
     }
   > = {
     https: {
-      label: 'Uses HTTPS',
-      description: 'Encrypted HTTPS connections help prevent attackers from reading or modifying the traffic in transit.'
+      title: 'HTTPS',
+      safe: 'Secure HTTPS connection',
+      warn: 'Not using HTTPS – avoid entering credentials',
+      learn: 'Encrypted HTTPS connections make it harder for attackers to read or modify traffic. When a QR code resolves to plain HTTP, treat forms and logins as untrusted.'
     },
     suspicious_tld: {
-      label: 'Trusted TLD',
-      description: 'Some top-level domains see disproportionate abuse; unfamiliar endings may indicate disposable or risky hosting.'
+      title: 'Top-level domain',
+      safe: 'Common top-level domain',
+      warn: 'Unfamiliar TLD – verify the sender',
+      learn: 'Some top-level domains see disproportionate abuse because they are cheap or poorly regulated. Confirm that the domain matches the brand you expect before proceeding.'
     },
     punycode: {
-      label: 'IDN / Punycode',
-      description: 'Punycode encodes international characters. Attackers use it to mimic well-known domains with subtle lookalike glyphs.'
+      title: 'Lookalike characters',
+      safe: 'Standard Latin domain',
+      warn: 'Lookalike characters detected',
+      learn: 'Internationalised domain names (punycode) can imitate trusted brands with subtle glyph differences. Inspect the decoded hostname carefully.'
     },
     file_download: {
-      label: 'File download',
-      description: 'Direct links to executables or archives can deliver unwanted software. Assess the source before running downloaded files.'
+      title: 'File download',
+      safe: 'No direct file download',
+      warn: 'Downloads a file – scan before opening',
+      learn: 'Unexpected executables or archives may deliver malware. Verify the source and scan the file before running anything you download.'
     },
     very_long: {
-      label: 'URL length',
-      description: 'Extremely long URLs often bury malicious parameters or tracking payloads that are hard to review at a glance.'
+      title: 'URL length',
+      safe: 'Readable URL length',
+      warn: 'Very long URL – watch for hidden params',
+      learn: 'Extremely long URLs can hide malicious parameters or tracking payloads. Review the destination in a desktop browser before entering data.'
     },
     shortener: {
-      label: 'Shortener',
-      description: 'Shortened URLs hide the destination. Attackers rely on that opacity to lure users to unexpected sites.'
+      title: 'Link shortener',
+      safe: 'Destination is visible',
+      warn: 'Shortened link – destination hidden',
+      learn: 'Shortened URLs obscure the true destination. Expand the link or rely on preview tools before following it.'
     },
     scheme_safe: {
-      label: 'Scheme safe',
-      description: 'Unsafe schemes like data:, file:, or custom protocols can execute local content or bypass browser safeguards.'
+      title: 'URL scheme',
+      safe: 'Browser-friendly scheme',
+      warn: 'Dangerous scheme detected',
+      learn: 'Schemes such as data:, file:, or custom protocols can execute local content or bypass browser safeguards. Prefer HTTPS URLs shared by trusted sources.'
     },
     invalid_url: {
-      label: 'Valid URL',
-      description: 'We need a parsable URL to inspect. Invalid inputs bypass browser protections and cannot be verified.'
+      title: 'URL validity',
+      safe: 'Valid URL supplied',
+      warn: 'Unrecognised URL – cannot be verified',
+      learn: 'We need a parsable URL to inspect. Non-standard or malformed values bypass browser protections and cannot be assessed.'
     }
   };
 
@@ -85,45 +117,59 @@
     { text: 'Punycode / IDN', score: '+10' },
     { text: 'Executable download', score: '+20' },
     { text: 'Very long URL', score: '+5' },
-    { text: 'Shortener', score: '+6' },
+    { text: 'Shortened link', score: '+45' },
+    { text: 'Suspicious keywords', score: '+40' },
     { text: 'data:/file: scheme', score: '+50' },
-    { text: 'Score ≥50 → Block, ≥20 → Warn' }
+    { text: 'Score ≥70 → Block, ≥40 → Warn' }
   ];
-
-  type Theme = 'dark' | 'light';
-
-  const THEME_KEY = 'qrcheck-theme';
 
   let theme: Theme = 'dark';
   let themeReady = false;
+  let flow: FlowState = 'idle';
   let urlText = '';
   let manualUrl = '';
-  let result: AnalysisResult | null = null;
+  let qrContent: QRContent | null = null;
+  let heuristicsResult: any = null;
+  let formattedHeuristics: any = null;
   let hops: string[] = [];
   let intelRes: IntelResponse | null = null;
   let error = '';
+  let cameraError = '';
+  let clipboardError = '';
   let step = '';
-  let busy = false;
   let scanning = false;
+  let entryOpen = false;
+  let learnMoreOpen = false;
+  let checksOpen = false;
+  let redirectsOpen = false;
+  let intelOpen = false;
+  let entryDropActive = false;
+  let entryModal: HTMLElement | null = null;
+  let entryCameraButton: HTMLButtonElement | null = null;
+  let entryFileInput: HTMLInputElement | null = null;
   let videoEl: HTMLVideoElement | null = null;
   let stream: MediaStream | null = null;
   let scanFrameHandle: number | null = null;
-  let cameraError = '';
-  let dropActive = false;
-  let clipboardError = '';
-  let expandedSignal: string | null = null;
-  let cameraButton: HTMLButtonElement | null = null;
 
   const captureCanvas = document.createElement('canvas');
   const captureCtx = captureCanvas.getContext('2d');
 
-  $: verdictMetaInfo = result ? verdictMeta[result.verdict] : null;
+  $: verdictMetaInfo = heuristicsResult ? verdictMeta[getVerdictFromHeuristics()] : null;
   $: intelCards = buildIntelCards(intelRes);
+  $: busy = flow === 'processing';
+  $: alerts = buildAlerts();
+
   $: if (themeReady) {
     applyTheme(theme);
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(THEME_KEY, theme);
     }
+  }
+
+  $: if (entryOpen) {
+    void tick().then(() => {
+      entryCameraButton?.focus();
+    });
   }
 
   onMount(() => {
@@ -135,107 +181,215 @@
     applyTheme(theme);
     themeReady = true;
     window.addEventListener('keydown', handleGlobalKeydown);
-    void tick().then(() => {
-      cameraButton?.focus();
-    });
   });
 
-  async function onFile(event: Event) {
+  onDestroy(() => {
+    stopCameraScan();
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('keydown', handleGlobalKeydown);
+    }
+  });
+
+  function applyTheme(next: Theme) {
+    if (typeof document === 'undefined') return;
+    document.body.dataset.theme = next;
+    document.documentElement.style.colorScheme = next;
+  }
+
+  function toggleTheme() {
+    theme = theme === 'dark' ? 'light' : 'dark';
+  }
+
+  function openEntrySheet() {
+    entryOpen = true;
+    entryDropActive = false;
+    clipboardError = '';
+  }
+
+  function closeEntrySheet() {
+    entryOpen = false;
+    entryDropActive = false;
+  }
+
+  function buildAlerts(): Alert[] {
+    const items: Alert[] = [];
+    if (cameraError) {
+      items.push({
+        id: 'camera',
+        tone: 'error',
+        message: cameraError,
+        hint: 'Check browser permissions or switch to the upload option.'
+      });
+    }
+    if (clipboardError) {
+      items.push({
+        id: 'clipboard',
+        tone: 'warn',
+        message: clipboardError,
+        hint: 'Try copying the QR again or use the file upload.'
+      });
+    }
+    if (error) {
+      items.push({
+        id: 'analysis',
+        tone: 'error',
+        message: error
+      });
+    }
+    return items;
+  }
+
+  function dismissAlert(id: string) {
+    if (id === 'camera') cameraError = '';
+    if (id === 'clipboard') clipboardError = '';
+    if (id === 'analysis') error = '';
+  }
+
+  function prepareForAnalysis() {
+    error = '';
+    step = '';
+    qrContent = null;
+    heuristicsResult = null;
+    formattedHeuristics = null;
+    hops = [];
+    intelRes = null;
+    learnMoreOpen = false;
+    checksOpen = false;
+    redirectsOpen = false;
+    intelOpen = false;
+    flow = 'processing';
+  }
+
+  function getVerdictFromHeuristics(): VerdictKey {
+    if (!heuristicsResult) return 'SAFE';
+    
+    if (heuristicsResult.risk === 'high') return 'BLOCK';
+    if (heuristicsResult.risk === 'medium') return 'WARN';
+    return 'SAFE';
+  }
+
+  function getSignalAction(key: string, ok: boolean) {
+    const meta = signalMeta[key];
+    if (!meta) return ok ? 'Healthy signal' : 'Needs attention';
+    return ok ? meta.safe : meta.warn;
+  }
+
+  function getSignalLearn(key: string) {
+    return signalMeta[key]?.learn ?? 'Detailed heuristics information unavailable.';
+  }
+
+  async function handleEntryFile(event: Event) {
     const file = (event.target as HTMLInputElement).files?.[0];
     if (!file) return;
     await processFile(file);
+    if (entryFileInput) {
+      entryFileInput.value = '';
+    }
   }
 
   async function processFile(file: File) {
-    reset();
+    closeEntrySheet();
+    prepareForAnalysis();
     try {
-      step = 'Decoding QR code...';
+      step = 'Decoding QR image…';
       const raw = await decodeQRFromFile(file);
       await processDecoded(raw);
     } catch (err: any) {
-      error = err?.message || 'Unable to analyze QR code';
+      flow = 'error';
+      error = err?.message || 'Unable to analyse that QR image.';
       console.error('QR analysis failed:', err);
     } finally {
       step = '';
-      busy = false;
     }
+  }
+
+  async function analyzeFromText(raw: string, { closeEntry = true }: { closeEntry?: boolean } = {}) {
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      error = 'Enter a URL to analyse.';
+      return;
+    }
+    if (closeEntry) {
+      closeEntrySheet();
+    }
+    prepareForAnalysis();
+    await processDecoded(trimmed);
   }
 
   async function runManual() {
-    const trimmed = manualUrl.trim();
-    if (!trimmed) {
-      error = 'Enter a URL to analyze';
-      return;
-    }
-    try {
-      await analyzeRaw(trimmed);
-    } catch (err: any) {
-      error = err?.message || 'Unable to analyze URL';
-    }
-  }
-
-  async function analyzeRaw(raw: string) {
-    reset();
-    try {
-      await processDecoded(raw);
-    } finally {
-      step = '';
-      busy = false;
-    }
+    await analyzeFromText(manualUrl);
   }
 
   async function processDecoded(raw: string) {
     urlText = raw;
-    await runAnalysis(raw);
+    try {
+      // Parse the QR content
+      qrContent = parseQRContent(raw);
+      
+      // Run heuristics analysis
+      await runHeuristicsAnalysis(qrContent);
+      
+      // If it's a URL, continue with additional checks
+      if (qrContent.type === 'url') {
+        await runUrlAnalysis(raw);
+      } else {
+        flow = 'complete';
+      }
+    } catch (err: any) {
+      flow = 'error';
+      error = err?.message || 'Unable to complete the analysis.';
+      console.error('Analysis failed:', err);
+    }
   }
 
-  function reset({ busy: busyState = true }: { busy?: boolean } = {}) {
-    error = '';
-    cameraError = '';
-    clipboardError = '';
-    busy = busyState;
-    step = '';
-    result = null;
-    hops = [];
-    intelRes = null;
-    expandedSignal = null;
+  async function runHeuristicsAnalysis(content: QRContent) {
+    step = 'Analysing locally…';
+    heuristicsResult = await analyzeHeuristics(content);
+    formattedHeuristics = formatHeuristicResults(heuristicsResult);
   }
 
-  async function runAnalysis(raw: string) {
-    step = 'Analyzing locally...';
-    result = analyze(raw);
+  async function runUrlAnalysis(raw: string) {
+    try {
+      step = 'Following redirects…';
+      const chain = await resolveChain(raw);
+      hops = chain.hops;
 
-    step = 'Following redirects...';
-    const chain = await resolveChain(raw);
-    hops = chain.hops;
+      step = 'Checking threat intel…';
+      intelRes = await intel(chain.final || raw);
 
-    step = 'Checking threat sources...';
-    intelRes = await intel(chain.final || raw);
+      flow = 'complete';
+    } finally {
+      step = '';
+    }
   }
 
   async function startCameraScan() {
     if (busy || scanning) return;
-    reset({ busy: false });
+    closeEntrySheet();
+    cameraError = '';
+    step = 'Align the QR code inside the frame';
     try {
       if (!captureCtx) {
-        throw new Error('Camera capture not supported in this browser');
+        throw new Error('Camera capture is not supported by this browser.');
       }
       stream = await startCamera();
       scanning = true;
+      flow = 'scanning';
       await tick();
       if (!videoEl) {
-        throw new Error('Camera unavailable');
+        throw new Error('Camera unavailable.');
       }
       videoEl.srcObject = stream;
       await videoEl.play();
       scheduleScan();
     } catch (err: any) {
-      cameraError = err?.message || 'Unable to start camera';
-      stopCameraScan();
+      console.error('Camera failed to start:', err);
+      stopCameraScan('error');
+      cameraError = err?.message || 'Unable to access the camera.';
     }
   }
 
-  function stopCameraScan() {
+  function stopCameraScan(nextFlow: FlowState | null = null) {
     if (scanFrameHandle !== null) {
       cancelAnimationFrame(scanFrameHandle);
       scanFrameHandle = null;
@@ -248,15 +402,19 @@
       videoEl.srcObject = null;
     }
     scanning = false;
+    if (nextFlow) {
+      flow = nextFlow;
+    } else if (flow === 'scanning') {
+      flow = heuristicsResult ? 'complete' : 'idle';
+    }
+    if (flow !== 'processing') {
+      step = '';
+    }
   }
 
   async function handleCameraDetection(raw: string) {
     stopCameraScan();
-    try {
-      await analyzeRaw(raw);
-    } catch (err: any) {
-      error = err?.message || 'Unable to analyze QR code';
-    }
+    await analyzeFromText(raw, { closeEntry: false });
   }
 
   function scheduleScan() {
@@ -297,7 +455,7 @@
   async function pasteFromClipboard() {
     clipboardError = '';
     if (!navigator.clipboard) {
-      clipboardError = 'Clipboard access is not available in this browser.';
+      clipboardError = 'Clipboard access is not available. Use upload instead.';
       return;
     }
     try {
@@ -317,13 +475,13 @@
       if (navigator.clipboard.readText) {
         const text = (await navigator.clipboard.readText())?.trim();
         if (text) {
-          await analyzeRaw(text);
+          await analyzeFromText(text);
           return;
         }
       }
-      clipboardError = 'Clipboard did not contain a QR image or URL.';
+      clipboardError = 'Clipboard did not contain a QR image or URL. Try copying it again or use upload.';
     } catch (err: any) {
-      clipboardError = err?.message || 'Unable to read clipboard.';
+      clipboardError = `${err?.message || 'Unable to read the clipboard.'} Grant access or try the upload option.`;
     }
   }
 
@@ -344,29 +502,28 @@
       const text = data.getData('text')?.trim();
       if (text) {
         event.preventDefault();
-        await analyzeRaw(text);
+        await analyzeFromText(text);
       }
     } catch (err: any) {
-      clipboardError = err?.message || 'Unable to process clipboard content.';
+      error = err?.message || 'Unable to process clipboard content.';
     }
   }
 
-  function onDragEnter(event: DragEvent) {
-    event.preventDefault();
-    dropActive = true;
+  function onEntryDragEnter() {
+    entryDropActive = true;
   }
 
-  function onDragLeave(event: DragEvent) {
+  function onEntryDragLeave(event: DragEvent) {
     const current = event.currentTarget as HTMLElement | null;
     const related = event.relatedTarget as Node | null;
     if (current && related && current.contains(related)) {
       return;
     }
-    dropActive = false;
+    entryDropActive = false;
   }
 
-  async function onDrop(event: DragEvent) {
-    dropActive = false;
+  async function onEntryDrop(event: DragEvent) {
+    entryDropActive = false;
     const files = event.dataTransfer?.files;
     if (files && files.length > 0) {
       await processFile(files[0]);
@@ -374,43 +531,19 @@
     }
     const text = event.dataTransfer?.getData('text')?.trim();
     if (text) {
-      await analyzeRaw(text);
+      await analyzeFromText(text);
     }
-  }
-
-  onDestroy(() => {
-    stopCameraScan();
-    if (typeof window !== 'undefined') {
-      window.removeEventListener('keydown', handleGlobalKeydown);
-    }
-  });
-
-  function applyTheme(next: Theme) {
-    if (typeof document === 'undefined') return;
-    document.body.dataset.theme = next;
-    document.documentElement.style.colorScheme = next;
-  }
-
-  function toggleTheme() {
-    theme = theme === 'dark' ? 'light' : 'dark';
-  }
-
-  function toggleSignalDetail(key: string | null) {
-    if (key === null) {
-      expandedSignal = null;
-      return;
-    }
-    expandedSignal = expandedSignal === key ? null : key;
-  }
-
-  function getSignalMeta(key: string) {
-    return signalMeta[key] ?? { label: key, description: '' };
   }
 
   function handleGlobalKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
-      if (expandedSignal) {
-        expandedSignal = null;
+      if (entryOpen) {
+        closeEntrySheet();
+        event.stopPropagation();
+        return;
+      }
+      if (learnMoreOpen) {
+        learnMoreOpen = false;
         event.stopPropagation();
       }
       return;
@@ -426,9 +559,9 @@
         return;
       }
     }
-    if (scanning || busy) return;
+    if (entryOpen || scanning || flow === 'processing') return;
     event.preventDefault();
-    void startCameraScan();
+    openEntrySheet();
   }
 
   function buildIntelCards(data: IntelResponse | null): IntelCard[] {
@@ -457,7 +590,7 @@
         icon: '🌐',
         status: 'error',
         headline: 'Lookup failed',
-        detail: 'No response received from URLHaus.'
+        detail: 'No response from URLHaus.'
       };
     }
     const status = String(data.query_status || '').toLowerCase();
@@ -475,8 +608,8 @@
         name: 'URLHaus',
         icon: '🌐',
         status: 'error',
-        headline: 'Feed unavailable',
-        detail: 'URLHaus responded with an error. Try again later.'
+        headline: 'Feed error',
+        detail: 'URLHaus returned an error. Try again later.'
       };
     }
     return {
@@ -504,7 +637,7 @@
         icon: '🎣',
         status: 'error',
         headline: 'Lookup failed',
-        detail: 'No response received from PhishTank.'
+        detail: 'No response from PhishTank.'
       };
     }
     if (typeof data === 'object' && 'error' in data) {
@@ -557,181 +690,444 @@
 </script>
 
 <main class="page" on:paste={handlePasteEvent}>
-  <header class="hero">
-    <div class="hero-top">
-      <h1>QRCheck.ca</h1>
-      <button class="theme-toggle" on:click={toggleTheme}>
-        {theme === 'dark' ? '🌞 Light mode' : '🌙 Dark mode'}
-      </button>
+  <header class="top-bar">
+    <div class="brand">
+      <span class="brand-title">QRCheck.ca</span>
+      <span class="brand-tagline">Privacy-first QR inspection</span>
     </div>
-    <p>Scan QR codes safely with local heuristics, redirect tracing, and live insights.</p>
-    {#if urlText}
-      <p class="muted subtle">Last decoded value: {urlText}</p>
-    {/if}
+    <button class="theme-toggle" on:click={toggleTheme} type="button">
+      {theme === 'dark' ? '🌞 Light mode' : '🌙 Dark mode'}
+    </button>
   </header>
 
-  <section class="grid">
-    <section class="panel camera-panel">
-      <h2>Scan with Camera</h2>
-      {#if !scanning}
-        <div class="camera-cta-wrapper">
+  {#if alerts.length}
+    <div class="alerts" aria-live="polite">
+      {#each alerts as alert (alert.id)}
+        <div class={`alert ${alert.tone}`}>
+          <span class="alert-icon">
+            {alert.tone === 'error' ? '⚠️' : alert.tone === 'warn' ? '⚠️' : 'ℹ️'}
+          </span>
+          <div class="alert-body">
+            <p>{alert.message}</p>
+            {#if alert.hint}<p class="alert-hint">{alert.hint}</p>{/if}
+          </div>
           <button
-            class="primary camera-cta"
-            on:click={() => void startCameraScan()}
-            disabled={busy}
-            bind:this={cameraButton}
+            class="alert-dismiss"
             type="button"
+            on:click={() => dismissAlert(alert.id)}
+            aria-label="Dismiss alert"
           >
-            Open Camera
+            ✕
           </button>
-          <p class="muted subtle camera-note">Press Enter or tap the button to start scanning instantly. Requires HTTPS on mobile.</p>
         </div>
-      {:else}
-        <div class="camera-feed">
-          <video bind:this={videoEl} autoplay playsinline muted></video>
-        </div>
-        <div class="panel-actions camera-actions">
-          <button class="secondary" on:click={stopCameraScan} type="button">Stop camera</button>
-          <span class="muted subtle">Align the QR code inside the frame for auto-detect.</span>
-        </div>
+      {/each}
+    </div>
+  {/if}
+
+  <section class="intro">
+    <div class="intro-card">
+      <h1>Know before you scan</h1>
+      <p>Get a quick verdict on any QR code without leaving your browser.</p>
+      <ul class="guide">
+        <li>
+          <span class="step-icon">①</span>
+          <span>Point camera</span>
+        </li>
+        <li>
+          <span class="step-icon">②</span>
+          <span>Check verdict</span>
+        </li>
+        <li>
+          <span class="step-icon">③</span>
+          <span>Share safely</span>
+        </li>
+      </ul>
+      <div class="cta-row">
+        <button class="primary" type="button" on:click={openEntrySheet}>
+          Scan or upload QR
+        </button>
+        {#if step && (flow === 'processing' || flow === 'scanning')}
+          <span class="status-pill">{step}</span>
+        {/if}
+      </div>
+      {#if urlText && flow === 'complete'}
+        <p class="last-scan">
+          Last scanned: <span>{urlText}</span>
+        </p>
       {/if}
-      {#if cameraError}<p class="error">{cameraError}</p>{/if}
-    </section>
-
-    <section class="panel upload-panel">
-      <h2>Upload or Drop</h2>
-      <div
-        class={`dropzone ${dropActive ? 'active' : ''}`}
-        role="region"
-        aria-label="QR image drop zone"
-        on:dragenter={onDragEnter}
-        on:dragover|preventDefault
-        on:dragleave={onDragLeave}
-        on:drop|preventDefault={onDrop}
-      >
-        <p><span>📎</span> Drag & Drop a QR image here</p>
-        <label class="file-trigger">
-          <input
-            type="file"
-            accept="image/*"
-            on:change={onFile}
-            disabled={busy}
-          />
-          <span>Browse files</span>
-        </label>
-      </div>
-      <div class="panel-actions">
-        <button class="secondary" on:click={pasteFromClipboard} disabled={busy}>Paste from clipboard</button>
-        {#if clipboardError}<p class="error subtle">{clipboardError}</p>{/if}
-      </div>
-      {#if step}<p class="muted subtle">{step}</p>{/if}
-      {#if error}<p class="error">{error}</p>{/if}
-    </section>
-
-    {#if DEV_ENABLE_MANUAL_URL}
-      <section class="panel">
-        <h2>Manual URL (dev/testing)</h2>
-        <div class="input-row">
-          <input
-            class="w-full"
-            placeholder="https://example.com"
-            bind:value={manualUrl}
-            disabled={busy}
-          />
-          <button class="secondary" on:click={runManual} disabled={busy}>Analyze</button>
-        </div>
-      </section>
-    {/if}
+    </div>
   </section>
 
-  {#if result && verdictMetaInfo}
-    <section class={`verdict-card ${verdictMetaInfo.tone}`}>
-      <div class="verdict-header">
-        <div class="verdict-icon">{verdictMetaInfo.emoji}</div>
-        <div class="verdict-info">
-          <h3>{verdictMetaInfo.title}</h3>
-          <p class="muted subtle">{verdictMetaInfo.subtitle}</p>
-          <div class="verdict-tagline">
-            <span class="label">Verdict:</span>
-            <span class="value">{verdictMetaInfo.emoji} {verdictMetaInfo.title}</span>
+  {#if flow === 'scanning'}
+    <section class="camera-card" aria-live="polite">
+      <header>
+        <h2>Live camera scan</h2>
+        <span class="camera-hint">Align the QR code inside the frame</span>
+      </header>
+      <div class="camera-frame">
+        <video bind:this={videoEl} autoplay playsinline muted></video>
+      </div>
+      <div class="camera-actions">
+        <button class="secondary" type="button" on:click={() => stopCameraScan(heuristicsResult ? 'complete' : 'idle')}>
+          Stop scanning
+        </button>
+      </div>
+    </section>
+  {/if}
+
+  {#if heuristicsResult && formattedHeuristics && verdictMetaInfo}
+    <section class={`verdict-card ${verdictMetaInfo.tone}`} aria-live="polite">
+      <header class="verdict-summary">
+        <span class="verdict-emoji">{verdictMetaInfo.emoji}</span>
+        <div class="verdict-headings">
+          <h2>{verdictMetaInfo.heading} – {verdictMetaInfo.summary}</h2>
+          <p>{verdictMetaInfo.guidance}</p>
+        </div>
+        <div class="score-chip">
+          <span class="score-value">{heuristicsResult.score}</span>
+          <span class="score-label">Risk score</span>
+        </div>
+      </header>
+
+      {#if qrContent?.type === 'url'}
+        <p class="dest-url">{urlText}</p>
+      {:else}
+        <div class="content-type">
+          <span class="type-label">Content type:</span>
+          <span class="type-value">{qrContent?.type || 'unknown'}</span>
+        </div>
+        <p class="content-text">{qrContent?.text || 'No content'}</p>
+      {/if}
+
+      <details class="drawer" bind:open={checksOpen}>
+        <summary>See all checks</summary>
+        <div class="risk-summary">
+          <div class="risk-indicator" style="color: {formattedHeuristics.riskColor}">
+            {formattedHeuristics.riskText}
           </div>
+          <div class="risk-score">{formattedHeuristics.summary}</div>
         </div>
-        <div class="score-bubble">
-          <span class="score">{result.score}</span>
-          <span class="caption">threat score</span>
-        </div>
-      </div>
-
-      <p class="dest-url">{result.normalized}</p>
-
-      <p class="signal-help subtle">Tap a signal to learn why it matters.</p>
-
-      <div class="signals">
-        {#each result.signals as signal}
-          {@const meta = getSignalMeta(signal.key)}
-          <button
-            type="button"
-            class={`signal-chip ${signal.ok ? 'ok' : 'warn'} ${expandedSignal === signal.key ? 'active' : ''}`}
-            on:click={() => toggleSignalDetail(signal.key)}
-            aria-expanded={expandedSignal === signal.key}
-            aria-controls={`signal-detail-${signal.key}`}
-          >
-            <span class="chip-label">{signal.ok ? '✅' : '⚠️'} {meta.label}</span>
-            <span class="chip-hint">{expandedSignal === signal.key ? 'Tap to collapse' : 'Tap for details'}</span>
-            {#if expandedSignal === signal.key}
-              <div class="chip-detail-panel" role="region" id={`signal-detail-${signal.key}`}>
-                {#if meta.description}<p class="chip-detail">{meta.description}</p>{/if}
-                {#if signal.info}<p class="chip-context subtle">Observed: {signal.info}</p>{/if}
-              </div>
-            {:else if signal.info}
-              <small class="chip-summary">{signal.info}</small>
-            {/if}
-          </button>
-        {/each}
-      </div>
-
-      <details class="legend">
-        <summary>How we score safety</summary>
-        <ul>
-          {#each heuristicsLegend as item}
-            <li>
-              <span>{item.text}</span>
-              {#if item.score}<span>{item.score}</span>{/if}
-            </li>
-          {/each}
-        </ul>
+        
+        {#if formattedHeuristics.details.length}
+          <ul class="risk-details">
+            {#each formattedHeuristics.details as detail}
+              <li class="risk-detail">{detail}</li>
+            {/each}
+          </ul>
+        {:else}
+          <p class="no-issues">No specific issues detected.</p>
+        {/if}
+        
+        {#if heuristicsResult.recommendations.length}
+          <div class="recommendations">
+            <h4>Recommendations:</h4>
+            <ul>
+              {#each heuristicsResult.recommendations as recommendation}
+                <li>{recommendation}</li>
+              {/each}
+            </ul>
+          </div>
+        {/if}
       </details>
 
-      <div class="redirects">
-        <h4>Redirects</h4>
-        <ol>
-          {#each hops as hop, index}
-            <li>
-              <span class="hop-index">{index + 1}</span>
-              <span class="hop-url">{hop}</span>
-            </li>
-          {/each}
-        </ol>
-      </div>
+      {#if qrContent?.type === 'url' && hops.length}
+        <details class="drawer" bind:open={redirectsOpen}>
+          <summary>Redirect history</summary>
+          <ol class="redirect-list">
+            {#each hops as hop, index}
+              <li>
+                <span class="redirect-index">{index + 1}</span>
+                <span class="redirect-url">{hop}</span>
+              </li>
+            {/each}
+          </ol>
+        </details>
+      {/if}
 
       {#if intelCards.length}
-        <div class="intel-section">
-          <h4>Intel signals</h4>
+        <details class="drawer" bind:open={intelOpen}>
+          <summary>Threat intel</summary>
           <div class="intel-grid">
             {#each intelCards as card}
               <div class={`intel-card ${card.status}`}>
-                <div class="intel-source">{card.icon} {card.name}</div>
+                <span class="intel-source">{card.icon} {card.name}</span>
                 <p class="intel-headline">{card.headline}</p>
                 <p class="intel-detail">{card.detail}</p>
               </div>
             {/each}
           </div>
-        </div>
+        </details>
       {/if}
+
+      <button
+        class="link-button"
+        type="button"
+        on:click={() => (learnMoreOpen = !learnMoreOpen)}
+        aria-expanded={learnMoreOpen}
+      >
+        {learnMoreOpen ? 'Hide Learn More' : 'Learn more about these checks'}
+      </button>
+
+      {#if learnMoreOpen}
+        <section class="learn-more">
+          <h3>How QRCheck evaluates destinations</h3>
+          <div class="learn-list">
+            {#if heuristicsResult.details.shortenerCheck?.isShortener}
+              <div class="learn-item">
+                <span class="learn-term">URL Shortener</span>
+                <span class="learn-copy">Shortened URLs obscure the true destination. Expand the link or rely on preview tools before following it.</span>
+              </div>
+            {/if}
+            
+            {#if heuristicsResult.details.urlLength?.isExcessive}
+              <div class="learn-item">
+                <span class="learn-term">URL Length</span>
+                <span class="learn-copy">Extremely long URLs can hide malicious parameters or tracking payloads. Review the destination in a desktop browser before entering data.</span>
+              </div>
+            {/if}
+            
+            {#if heuristicsResult.details.obfuscation?.hasObfuscation}
+              <div class="learn-item">
+                <span class="learn-term">URL Obfuscation</span>
+                <span class="learn-copy">Obfuscated URLs may use encoding to hide malicious content. Be cautious with URLs that contain unusual encoding patterns.</span>
+              </div>
+            {/if}
+            
+            {#if heuristicsResult.details.suspiciousKeywords?.hasKeywords}
+              <div class="learn-item">
+                <span class="learn-term">Suspicious Keywords</span>
+                <span class="learn-copy">Keywords like "login", "verify", or "security" may be used in phishing attempts. Verify the source before proceeding.</span>
+              </div>
+            {/if}
+            
+            {#if heuristicsResult.details.domainReputation?.isIPBased}
+              <div class="learn-item">
+                <span class="learn-term">IP-based URLs</span>
+                <span class="learn-copy">URLs that use IP addresses instead of domain names may be suspicious. Legitimate services typically use domain names.</span>
+              </div>
+            {/if}
+            
+            {#if heuristicsResult.details.domainReputation?.hasSuspiciousTLD}
+              <div class="learn-item">
+                <span class="learn-term">Suspicious TLD</span>
+                <span class="learn-copy">Some top-level domains see disproportionate abuse because they are cheap or poorly regulated. Confirm that the domain matches the brand you expect.</span>
+              </div>
+            {/if}
+          </div>
+          
+          <div class="legend">
+            <h4>Scoring quick reference</h4>
+            <ul>
+              {#each heuristicsLegend as item}
+                <li>
+                  <span>{item.text}</span>
+                  {#if item.score}<span>{item.score}</span>{/if}
+                </li>
+              {/each}
+            </ul>
+          </div>
+        </section>
+      {/if}
+    </section>
+  {:else if flow === 'processing'}
+    <section class="processing-card" aria-live="polite">
+      <p>{step || 'Running checks…'}</p>
     </section>
   {/if}
 
-  <footer class="footer muted">
+  <footer class="footer">
     <span>🛡️ Privacy-first. Everything runs in your browser.</span>
   </footer>
+
+  {#if entryOpen}
+    <div
+      class="entry-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="entry-title"
+      >
+      <div class="entry-sheet" bind:this={entryModal}>
+        <header class="entry-header">
+          <h2 id="entry-title">Scan or upload a QR code</h2>
+          <button class="close-button" type="button" on:click={closeEntrySheet} aria-label="Close scan options">
+            ✕
+          </button>
+        </header>
+
+        <div class="entry-options">
+          <button
+            class="entry-option"
+            type="button"
+            on:click={() => void startCameraScan()}
+            bind:this={entryCameraButton}
+            disabled={busy}
+          >
+            <span class="option-icon">📷</span>
+            <span class="option-text">
+              <strong>Use camera</strong>
+              <span>Instant scan in-browser</span>
+            </span>
+          </button>
+
+          <label class="entry-option">
+            <span class="option-icon">🖼️</span>
+            <span class="option-text">
+              <strong>Upload image</strong>
+              <span>PNG, JPG, HEIC</span>
+            </span>
+            <input type="file" accept="image/*" on:change={handleEntryFile} bind:this={entryFileInput} disabled={busy} />
+          </label>
+
+          <button class="entry-option" type="button" on:click={() => void pasteFromClipboard()} disabled={busy}>
+            <span class="option-icon">📋</span>
+            <span class="option-text">
+              <strong>Paste from clipboard</strong>
+              <span>Supports images and URLs</span>
+            </span>
+          </button>
+        </div>
+
+        <div
+          class={`entry-drop ${entryDropActive ? 'active' : ''}`}
+          role="region"
+          aria-label="Drop a QR image here"
+          on:dragenter={onEntryDragEnter}
+          on:dragover|preventDefault
+          on:dragleave={onEntryDragLeave}
+          on:drop|preventDefault={onEntryDrop}
+        >
+          <p>Or drop a QR image here</p>
+        </div>
+
+        {#if DEV_ENABLE_MANUAL_URL}
+          <div class="manual-entry">
+            <label for="manual-url">Manual URL (dev)</label>
+            <div class="manual-row">
+              <input
+                id="manual-url"
+                placeholder="https://example.com"
+                bind:value={manualUrl}
+                autocomplete="off"
+                spellcheck="false"
+                inputmode="url"
+              />
+              <button class="secondary" type="button" on:click={runManual}>Analyze</button>
+            </div>
+          </div>
+        {/if}
+
+        <p class="entry-footnote">We decode locally first. Network intel only runs when configured.</p>
+      </div>
+    </div>
+  {/if}
 </main>
+
+<style>
+  /* Add styles for the new components */
+  .content-type {
+    display: flex;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    padding: 0.5rem;
+    background-color: var(--bg-secondary);
+    border-radius: 0.25rem;
+  }
+  
+  .type-label {
+    font-weight: 600;
+    margin-right: 0.5rem;
+    color: var(--text-secondary);
+  }
+  
+  .type-value {
+    font-family: monospace;
+    background-color: var(--bg-tertiary);
+    padding: 0.125rem 0.25rem;
+    border-radius: 0.125rem;
+    text-transform: uppercase;
+    font-size: 0.875rem;
+  }
+  
+  .content-text {
+    word-break: break-all;
+    margin-top: 0.5rem;
+  }
+  
+  .risk-summary {
+    display: flex;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    background-color: var(--bg-secondary);
+    border-radius: 0.25rem;
+  }
+  
+  .risk-indicator {
+    font-weight: 700;
+    font-size: 1.125rem;
+    margin-right: 1rem;
+  }
+  
+  .risk-score {
+    font-family: monospace;
+    color: var(--text-secondary);
+  }
+  
+  .risk-details {
+    margin-bottom: 1rem;
+  }
+  
+  .risk-detail {
+    margin-bottom: 0.5rem;
+    padding: 0.5rem;
+    background-color: var(--bg-secondary);
+    border-radius: 0.25rem;
+    list-style-type: '⚠️ ';
+  }
+  
+  .no-issues {
+    color: var(--text-secondary);
+    font-style: italic;
+    margin-bottom: 1rem;
+  }
+  
+  .recommendations {
+    margin-top: 1rem;
+  }
+  
+  .recommendations h4 {
+    margin-bottom: 0.5rem;
+    color: var(--text-primary);
+  }
+  
+  .recommendations ul {
+    margin-left: 1.5rem;
+  }
+  
+  .recommendations li {
+    margin-bottom: 0.25rem;
+  }
+  
+  .learn-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .learn-item {
+    padding: 0.75rem;
+    background-color: var(--bg-secondary);
+    border-radius: 0.25rem;
+  }
+  
+  .learn-term {
+    font-weight: 600;
+    display: block;
+    margin-bottom: 0.25rem;
+  }
+  
+  .learn-copy {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+  }
+</style>

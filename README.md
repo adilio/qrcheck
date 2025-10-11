@@ -1,89 +1,120 @@
-# QRcheck.ca
+# QRCheck
 
-QRCheck.ca is a privacy-first QR inspection toolkit. It decodes QR codes locally in your browser, scores destinations with transparent heuristics, traces redirects, and surfaces live intelligence signals from optional backend feeds. The UI draws from a liquid-glass aesthetic, supports dark/light themes, and works across desktop and mobile—including live camera scanning.
+Privacy-first QR code inspection tool that helps you identify potentially malicious QR codes before you scan them.
 
-## Highlights
-- **Static-first SPA** built with Svelte + Vite, deployable to GitHub Pages or any static host.
-- **Fast decoding** from file uploads, clipboard paste, drag-and-drop, or live camera capture.
-- **Transparent scoring** with weighted heuristics (HTTPS, TLD, punycode, length, shorteners, scheme, file downloads) and emoji-rich verdicts.
-- **Redirect intelligence** and feed integrations via an optional Go microservice (URLHaus, PhishTank, room for more).
-- **Autonomous testing**: Vitest unit suites, JSON schema contract tests, Playwright end-to-end with mocked intel.
+## Features
 
-## Project Layout
+- **Local Analysis**: All checks are performed in your browser, no data is sent to external servers
+- **URL Shortener Detection**: Identifies URLs that use link shortening services which can obscure the final destination
+- **Heuristic Analysis**: Detects suspicious patterns in URLs including:
+  - Excessive URL length
+  - URL obfuscation techniques
+  - Suspicious keywords
+  - IP-based URLs
+  - Suspicious top-level domains
+- **Content Type Detection**: Recognizes different QR code content types:
+  - URLs
+  - Plain text
+  - Email addresses
+  - Phone numbers
+  - SMS messages
+  - WiFi credentials
+  - Contact cards (vCard)
+  - Geographic locations
+- **Redirect Chain Analysis**: Follows redirects to reveal the final destination
+- **Threat Intelligence**: Optional integration with threat intelligence feeds
+
+## How It Works
+
+1. **Decode**: Extracts the raw data from QR codes
+2. **Parse**: Identifies the content type and structure
+3. **Analyze**: Runs heuristics to detect suspicious patterns
+4. **Verify**: Optionally checks against threat intelligence feeds
+5. **Report**: Provides a risk assessment with detailed findings
+
+## URL Shortener Detection
+
+QRCheck includes a comprehensive database of URL shortening services and can detect when a QR code contains a shortened URL. This is important because:
+
+- Shortened URLs obscure the true destination
+- They can be used to bypass security filters
+- Attackers often use them to hide malicious sites
+
+The tool checks against over 200 known shortening services including:
+- Popular services (bit.ly, tinyurl.com, t.co)
+- Niche services (cutt.ly, rebrand.ly, short.link)
+- Abused services (tk, ml, ga top-level domains)
+
+## Risk Assessment
+
+QRCheck provides a risk score from 0-100 with three risk levels:
+
+- **Low Risk (0-39)**: No obvious red flags
+- **Medium Risk (40-69)**: Some suspicious patterns detected
+- **High Risk (70+)**: Multiple risk factors or highly suspicious patterns
+
+## Development
+
+### Prerequisites
+
+- Node.js 18+
+- npm
+
+### Setup
+
+```bash
+# Install dependencies
+npm install
+
+# Run development server
+npm run dev
+
+# Run tests
+npm test
+
+# Build for production
+npm run build
 ```
-qrcheck/
-  README.md            ← You are here
-  src/                 ← Svelte SPA (App, heuristics, decode, API helpers)
-  public/              ← Static assets (manifest, icons)
-  mocks/api-mock.js    ← Deterministic intel/resolve mock server
-  tests/               ← Vitest unit + Playwright E2E + fixtures
-  contracts/           ← JSON schemas for backend responses
-  api/                 ← Go HTTP API (resolve + intel handlers)
-  .github/workflows/   ← CI and Pages deploy pipelines
+
+### Testing
+
+The project includes comprehensive unit tests for all components:
+
+```bash
+# Run all tests
+npm test
+
+# Run tests with coverage
+npm run test:coverage
 ```
 
-## Getting Started
-1. **Install dependencies**
-   ```bash
-   npm install
-   ```
-2. **Run the mock API** (new terminal):
-   ```bash
-   node mocks/api-mock.js
-   ```
-   - Provide `MOCK_HTTPS_CERT`/`MOCK_HTTPS_KEY` (and optional `MOCK_PORT`) when you need HTTPS for mobile camera testing.
-3. **Launch the dev server**:
-   ```bash
-   VITE_API_BASE=http://localhost:9090 VITE_DEV_MANUAL_URL=true npm run dev
-   ```
-   - Use `--host` to expose on your LAN. Add `--https --cert <path> --key <path>` to unlock camera on mobile browsers.
-4. **Visit** `http://localhost:5173` (or your chosen host). Toggle dark/light mode via the header button.
+### Architecture
 
-## Using the App
-- **Upload**: click “Browse files” or drag & drop a QR image onto the drop zone.
-- **Clipboard**: press the clipboard button or paste directly (supports images & URLs).
-- **Camera**: tap “Open camera” (requires HTTPS); the scan auto-stops when a code is detected.
-- **Manual URL**: enable `VITE_DEV_MANUAL_URL=true` to unlock the testing input during development.
-
-Each decode runs locally before contacting the API. The verdict card shows:
-- Weighted score with explanatory chips.
-- Redirect trail (HEAD requests, loop-protected).
-- Intel cards for feeds (URLHaus, PhishTank). Feeds return “Not checked” when the backend is disabled.
-
-## Testing & Tooling
-- **Unit + contract tests**: `npm run test`
-- **Playwright E2E** (with mock servers): `npm run e2e`
-- **Full CI parity**: `npm run ci:verify`
-- **Go backend tests**: `cd api && go test ./...`
-
-Playwright config starts the mock API and Vite server automatically. Tests stay deterministic by stubbing network intel responses.
-
-## Backend (Optional)
-The Go API (in `api/`) provides two endpoints:
-- `GET /resolve?url=` — Traces redirects with HEAD requests (10-hop limit, loop detection, custom UA).
-- `POST /intel` — Proxy to URLHaus + PhishTank with caching directives and error shielding.
-
-Deployment helpers:
-- `api/Dockerfile` and `api/fly.toml` for Fly.io.
-- Configure environment variables (`CORS_ORIGIN`, `PHISHTANK_API_KEY`, optional `GSB_API_KEY`).
-
-## Production Build & Deploy
-- **Build SPA**: `npm run build` (emits `dist/` with `.nojekyll`).
-- **GitHub Pages**: see `.github/workflows/pages.yml`.
-- **CI checks**: `.github/workflows/ci.yml` runs lint, unit, e2e, build, plus Go tests.
-
-## Privacy & Security Notes
-- All QR decoding and heuristics execute client-side before any network calls.
-- Redirect tracing uses HEAD with 10-hop cap, 10s timeout, and loop detection.
-- API responses are validated with JSON schemas; errors surface in the UI with clear messaging.
-- Camera access requires HTTPS; use self-signed certs locally (`mkcert` works well) and run both SPA and mock/API over TLS for mobile testing.
+- `src/lib/decode.ts` - QR code decoding and content parsing
+- `src/lib/heuristics.ts` - Heuristic analysis engine
+- `src/lib/shortener.ts` - URL shortener detection
+- `src/lib/api.ts` - External API integration
+- `src/lib/camera.ts` - Camera handling for live scanning
+- `src/App.svelte` - Main application component
 
 ## Contributing
-- Follow the guidelines in `AGENTS.md` for structure, commands, linting, and testing expectations.
-- Keep tests deterministic—extend mocks and schemas when touching intel/resolve behaviour.
-- Prefer descriptive PRs with screenshots or terminal snippets of new flows.
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests for new functionality
+5. Ensure all tests pass
+6. Submit a pull request
+
+## Privacy
+
+QRCheck is designed with privacy in mind:
+
+- All processing happens in your browser
+- No data is sent to external servers unless explicitly configured
+- No tracking or analytics
+- Open source and auditable
 
 ## License
-MIT © 2025 Present Collaborators. See [`LICENSE`](./LICENSE).
 
-Enjoy safer QR scanning!
+MIT License - see LICENSE file for details.

@@ -12,6 +12,26 @@ This guide consolidates the previous `AGENTS.md`, `PLAN.md`, and `IMPLEMENTATION
 
 ---
 
+## UX & Architecture Priorities
+
+- **Streamlined entry**: Replace competing CTAs with a single primary button that opens a modal/sheet for camera, upload, and paste options. The first-run experience should guide users directly into scanning without noise.
+- **Progressive disclosure**: Default verdicts to a compact summary (e.g., "✅ Safe – Reputable destination") and tuck deeper checks, redirect history, and intel into expandable sections.
+- **Actionable signals**: Keep verdict chip copy short and directive ("Avoid entering credentials"), moving longer explanations into a `Learn More` drawer.
+- **Lightweight styling**: Retire heavy glassmorphism in favour of neutral surfaces, subtle elevation, and strong contrast for readability.
+- **Robust empty/error states**: Surface permission and hardware failures via alert banners that include recovery steps.
+- **Accessibility guardrails**: Honour focus-visible styles, ensure `aria-*` attributes map correctly, and avoid auto-focus on mount.
+- **Onboarding helper**: Add a three-step guide or looping demo that highlights "Point camera → Check verdict → Share safely".
+
+---
+
+## Architecture Direction
+
+- **Stay on Svelte + Vite**: The current static-first approach meets performance, privacy, and deployment goals. Keep the SPA portable and CDN-friendly.
+- **Next.js stance**: Do not migrate today. Only reconsider if the roadmap demands authenticated accounts, personalised history, or dynamic marketing surfaces. When that moment arrives, evaluate SvelteKit first to preserve component investment.
+- **Optional backend**: Continue treating the Go microservice as an add-on. The frontend must gracefully degrade when `VITE_API_BASE` is unset.
+
+---
+
 ## Repository Layout
 
 ```
@@ -45,13 +65,35 @@ qrcheck/
 | QR decoding | `src/lib/decode.ts` | Uses `jsQR` over `ImageData` extracted from `<canvas>`. |
 | Heuristics | `src/lib/heuristics.ts` | Normalises URLs, scores HTTPS, TLD, punycode, file downloads, length, shorteners, and dangerous schemes. |
 | API client | `src/lib/api.ts` | Wraps optional Go API for redirect tracing (`resolve`) and intel lookups (`intel`). |
-| UI shell | `src/App.svelte` | Handles camera capture, drag-and-drop, clipboard ingest, manual URLs, verdict display, and intel cards. |
+| UI shell | `src/App.svelte` | Handle camera capture, drag-and-drop, clipboard ingest, manual URLs, verdict display, and intel cards. |
 
 Key interaction flow inside `App.svelte`:
 1. **Reset state** (`reset`) and run **decode** using file/camera/clipboard/manual entry.
 2. Apply **heuristics** locally for an immediate verdict.
 3. Call **resolve** to trace redirects, followed by **intel** to enrich with feed data when the backend is configured.
 4. Present expandable verdict chips so users can optionally dive into each heuristic explanation without cluttering the UI.
+
+---
+
+## Short URL Intelligence Pipeline
+
+1. **Canonical provider list**
+   - Fetch from [korlabsio/urlshortener](https://raw.githubusercontent.com/korlabsio/urlshortener/refs/heads/main/names.txt) and [PeterDaveHello/url-shorteners](https://raw.githubusercontent.com/PeterDaveHello/url-shorteners/refs/heads/master/list) using conditional requests (`If-None-Match`, `If-Modified-Since`).
+   - Store merged domains in `public/shorteners.json` along with metadata in `data/sources.lock.json`.
+   - Validate against `contracts/shorteners.schema.json` and fail CI if the schema or domain count regresses unexpectedly.
+2. **Typed ingestion helper**
+   - Implement `src/lib/shorteners.ts` with `loadShorteners()` that caches domains locally (IndexedDB or `localStorage`).
+   - Update `src/lib/heuristics.ts` so `isLikelyShortUrl()` consults this dataset first before falling back to heuristics like length or rare TLDs.
+3. **Optional enrichment API**
+   - Introduce a `/shorteners` endpoint that serves the cached JSON with proper `Cache-Control` headers.
+   - Allow `/resolve` to expand recognised short URLs server-side prior to scoring.
+4. **Monitoring & alerting**
+   - Log list size and freshness timestamp in diagnostics endpoints or telemetry.
+   - Alert when refresh fails validation or the domain count drops sharply.
+   - Document cadence updates in `docs/threat-intel.md`.
+5. **Automation script**
+   - Add `.github/scripts/refresh-shorteners.mjs` (see review snippet) and a scheduled workflow to refresh nightly.
+   - Ensure the script respects `MAX_AGE_MS` caching, writes outputs, and validates via Ajv before committing changes.
 
 ---
 
@@ -96,6 +138,28 @@ The Go service is optional. When `VITE_API_BASE` is unset, the frontend falls ba
 - **E2E**: Manual URL and failure states via Playwright (`tests/e2e`).
 - **Backend**: Rate limiting, URL resolution, and intel fallbacks (`api/cmd/qrcheck/main_test.go`).
 - Keep fixtures deterministic; extend the mock server and JSON schemas when behaviour changes.
+
+---
+
+## Implementation Roadmap
+
+1. **Design pass**: Wireframe the simplified landing screen, verdict cards, and onboarding helper. Validate mobile breakpoints first.
+2. **Component refactor**: Break `App.svelte` into modular components for the CTA modal, verdict summary, detailed drawers, and alert banners.
+3. **State audit**: Introduce a finite-state machine that captures `idle`, `scanning`, `processing`, `error`, and `complete` to simplify transitions.
+4. **Styling system**: Replace ad-hoc styles with CSS variables for colours, spacing, radius, and elevation tokens.
+5. **Docs & help**: Update README/help text to match the streamlined flow and new vocabulary.
+6. **Platform guardrails**: Revisit Next.js or SvelteKit only if authentication, dashboards, or dynamic content enter the roadmap.
+
+---
+
+## Quick Wins Checklist
+
+- [ ] Replace hero CTA cluster with a unified entry button + modal.
+- [ ] Collapse verdict details behind toggles.
+- [ ] Shorten verdict chip copy and move deep explanations to a drawer.
+- [ ] Add alert banners for error states and ensure focus-visible outlines.
+- [ ] Introduce onboarding helper (3-step guide or demo loop).
+- [ ] Ship the shortener refresh workflow, schema, and ingestion helper.
 
 ---
 

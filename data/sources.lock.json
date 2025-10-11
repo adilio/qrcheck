@@ -1,0 +1,12 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2025-01-01T00:00:00Z",
+  "sources": [
+    {
+      "name": "shorteners",
+      "type": "json",
+      "path": "/public/shorteners.json",
+      "description": "List of known URL shortener domains"
+    }
+  ]
+}
