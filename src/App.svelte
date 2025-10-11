@@ -332,6 +332,15 @@
       const chain = await resolveChain(raw);
       hops = chain.hops;
 
+      // If we detected a shortener but couldn't resolve redirects, add a helpful note
+      const urlObj = new URL(raw);
+      const domain = urlObj.hostname.toLowerCase();
+      const knownShorteners = ['bit.ly', 'tinyurl.com', 't.co', 'qrco.de', 'buff.ly', 'goo.gl', 'ow.ly'];
+      if (knownShorteners.some(shortener => domain.includes(shortener)) && hops.length === 1) {
+        // It's a known shortener but we couldn't resolve the redirect
+        console.info(`Shortened URL detected from ${domain}, but redirect expansion is limited by browser security.`);
+      }
+
       step = 'Checking threat intel…';
       intelRes = await intel(chain.final || raw);
 
@@ -1061,21 +1070,7 @@
     text-decoration: none;
   }
 
-  .theme-toggle {
-    background: none;
-    border: 1px solid var(--border-color);
-    font-size: 1.5rem;
-    cursor: pointer;
-    padding: 0.5rem;
-    border-radius: 0.25rem;
-    transition: background-color 0.2s, border-color 0.2s;
-  }
-
-  .theme-toggle:hover {
-    background-color: var(--bg-secondary);
-    border-color: var(--text-secondary);
-  }
-
+  
   .url-display {
     margin-bottom: 1rem;
   }
