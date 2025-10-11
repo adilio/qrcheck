@@ -117,7 +117,8 @@
     { text: 'Punycode / IDN', score: '+10' },
     { text: 'Executable download', score: '+20' },
     { text: 'Very long URL', score: '+5' },
-    { text: 'Shortened link', score: '+45' },
+    { text: 'Reputable shortener', score: '+15' },
+    { text: 'Unknown shortener', score: '+45' },
     { text: 'Suspicious keywords', score: '+40' },
     { text: 'data:/file: scheme', score: '+50' },
     { text: 'Score ≥70 → Block, ≥40 → Warn' }
@@ -138,15 +139,10 @@
   let clipboardError = '';
   let step = '';
   let scanning = false;
-  let entryOpen = false;
   let learnMoreOpen = false;
   let checksOpen = false;
   let redirectsOpen = false;
   let intelOpen = false;
-  let entryDropActive = false;
-  let entryModal: HTMLElement | null = null;
-  let entryCameraButton: HTMLButtonElement | null = null;
-  let entryFileInput: HTMLInputElement | null = null;
   let videoEl: HTMLVideoElement | null = null;
   let stream: MediaStream | null = null;
   let scanFrameHandle: number | null = null;
@@ -166,12 +162,7 @@
     }
   }
 
-  $: if (entryOpen) {
-    void tick().then(() => {
-      entryCameraButton?.focus();
-    });
-  }
-
+  
   onMount(() => {
     if (typeof window === 'undefined') return;
     const stored = window.localStorage.getItem(THEME_KEY);
@@ -200,17 +191,7 @@
     theme = theme === 'dark' ? 'light' : 'dark';
   }
 
-  function openEntrySheet() {
-    entryOpen = true;
-    entryDropActive = false;
-    clipboardError = '';
-  }
-
-  function closeEntrySheet() {
-    entryOpen = false;
-    entryDropActive = false;
-  }
-
+  
   function buildAlerts(): Alert[] {
     const items: Alert[] = [];
     if (cameraError) {
@@ -288,7 +269,6 @@
   }
 
   async function processFile(file: File) {
-    closeEntrySheet();
     prepareForAnalysis();
     try {
       step = 'Decoding QR image…';
@@ -303,14 +283,11 @@
     }
   }
 
-  async function analyzeFromText(raw: string, { closeEntry = true }: { closeEntry?: boolean } = {}) {
+  async function analyzeFromText(raw: string) {
     const trimmed = raw.trim();
     if (!trimmed) {
       error = 'Enter a URL to analyse.';
       return;
-    }
-    if (closeEntry) {
-      closeEntrySheet();
     }
     prepareForAnalysis();
     await processDecoded(trimmed);
@@ -365,13 +342,13 @@
 
   async function startCameraScan() {
     if (busy || scanning) return;
-    closeEntrySheet();
     cameraError = '';
     step = 'Align the QR code inside the frame';
     try {
       if (!captureCtx) {
         throw new Error('Camera capture is not supported by this browser.');
       }
+      // Request persistent camera permissions with more specific constraints
       stream = await startCamera();
       scanning = true;
       flow = 'scanning';
@@ -414,7 +391,7 @@
 
   async function handleCameraDetection(raw: string) {
     stopCameraScan();
-    await analyzeFromText(raw, { closeEntry: false });
+    await analyzeFromText(raw);
   }
 
   function scheduleScan() {
@@ -509,39 +486,9 @@
     }
   }
 
-  function onEntryDragEnter() {
-    entryDropActive = true;
-  }
-
-  function onEntryDragLeave(event: DragEvent) {
-    const current = event.currentTarget as HTMLElement | null;
-    const related = event.relatedTarget as Node | null;
-    if (current && related && current.contains(related)) {
-      return;
-    }
-    entryDropActive = false;
-  }
-
-  async function onEntryDrop(event: DragEvent) {
-    entryDropActive = false;
-    const files = event.dataTransfer?.files;
-    if (files && files.length > 0) {
-      await processFile(files[0]);
-      return;
-    }
-    const text = event.dataTransfer?.getData('text')?.trim();
-    if (text) {
-      await analyzeFromText(text);
-    }
-  }
-
+  
   function handleGlobalKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
-      if (entryOpen) {
-        closeEntrySheet();
-        event.stopPropagation();
-        return;
-      }
       if (learnMoreOpen) {
         learnMoreOpen = false;
         event.stopPropagation();
@@ -559,9 +506,10 @@
         return;
       }
     }
-    if (entryOpen || scanning || flow === 'processing') return;
+    if (scanning || flow === 'processing') return;
     event.preventDefault();
-    openEntrySheet();
+    // Start camera scan when Enter is pressed
+    void startCameraScan();
   }
 
   function buildIntelCards(data: IntelResponse | null): IntelCard[] {
@@ -695,8 +643,8 @@
       <span class="brand-title">QRCheck.ca</span>
       <span class="brand-tagline">Privacy-first QR inspection</span>
     </div>
-    <button class="theme-toggle" on:click={toggleTheme} type="button">
-      {theme === 'dark' ? '🌞 Light mode' : '🌙 Dark mode'}
+    <button class="theme-toggle" on:click={toggleTheme} type="button" title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+      {theme === 'dark' ? '🌞' : '🌙'}
     </button>
   </header>
 
@@ -743,9 +691,13 @@
         </li>
       </ul>
       <div class="cta-row">
-        <button class="primary" type="button" on:click={openEntrySheet}>
-          Scan or upload QR
+        <button class="primary camera-btn" type="button" on:click={() => void startCameraScan()}>
+          📷 Camera
         </button>
+        <label class="primary upload-btn">
+          📁 Upload
+          <input type="file" accept="image/*" on:change={handleEntryFile} style="display: none;" />
+        </label>
         {#if step && (flow === 'processing' || flow === 'scanning')}
           <span class="status-pill">{step}</span>
         {/if}
@@ -790,7 +742,18 @@
       </header>
 
       {#if qrContent?.type === 'url'}
-        <p class="dest-url">{urlText}</p>
+        <div class="url-display">
+          <div class="original-url">
+            <span class="url-label">Original URL:</span>
+            <span class="url-value">{urlText}</span>
+          </div>
+          {#if hops.length > 1}
+            <div class="final-url">
+              <span class="url-label">Final destination:</span>
+              <span class="url-value">{hops[hops.length - 1]}</span>
+            </div>
+          {/if}
+        </div>
       {:else}
         <div class="content-type">
           <span class="type-label">Content type:</span>
@@ -939,88 +902,7 @@
     <span>🛡️ Privacy-first. Everything runs in your browser.</span>
   </footer>
 
-  {#if entryOpen}
-    <div
-      class="entry-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="entry-title"
-      >
-      <div class="entry-sheet" bind:this={entryModal}>
-        <header class="entry-header">
-          <h2 id="entry-title">Scan or upload a QR code</h2>
-          <button class="close-button" type="button" on:click={closeEntrySheet} aria-label="Close scan options">
-            ✕
-          </button>
-        </header>
-
-        <div class="entry-options">
-          <button
-            class="entry-option"
-            type="button"
-            on:click={() => void startCameraScan()}
-            bind:this={entryCameraButton}
-            disabled={busy}
-          >
-            <span class="option-icon">📷</span>
-            <span class="option-text">
-              <strong>Use camera</strong>
-              <span>Instant scan in-browser</span>
-            </span>
-          </button>
-
-          <label class="entry-option">
-            <span class="option-icon">🖼️</span>
-            <span class="option-text">
-              <strong>Upload image</strong>
-              <span>PNG, JPG, HEIC</span>
-            </span>
-            <input type="file" accept="image/*" on:change={handleEntryFile} bind:this={entryFileInput} disabled={busy} />
-          </label>
-
-          <button class="entry-option" type="button" on:click={() => void pasteFromClipboard()} disabled={busy}>
-            <span class="option-icon">📋</span>
-            <span class="option-text">
-              <strong>Paste from clipboard</strong>
-              <span>Supports images and URLs</span>
-            </span>
-          </button>
-        </div>
-
-        <div
-          class={`entry-drop ${entryDropActive ? 'active' : ''}`}
-          role="region"
-          aria-label="Drop a QR image here"
-          on:dragenter={onEntryDragEnter}
-          on:dragover|preventDefault
-          on:dragleave={onEntryDragLeave}
-          on:drop|preventDefault={onEntryDrop}
-        >
-          <p>Or drop a QR image here</p>
-        </div>
-
-        {#if DEV_ENABLE_MANUAL_URL}
-          <div class="manual-entry">
-            <label for="manual-url">Manual URL (dev)</label>
-            <div class="manual-row">
-              <input
-                id="manual-url"
-                placeholder="https://example.com"
-                bind:value={manualUrl}
-                autocomplete="off"
-                spellcheck="false"
-                inputmode="url"
-              />
-              <button class="secondary" type="button" on:click={runManual}>Analyze</button>
-            </div>
-          </div>
-        {/if}
-
-        <p class="entry-footnote">We decode locally first. Network intel only runs when configured.</p>
-      </div>
-    </div>
-  {/if}
-</main>
+  </main>
 
 <style>
   /* Add styles for the new components */
@@ -1129,5 +1011,63 @@
   .learn-copy {
     color: var(--text-secondary);
     font-size: 0.875rem;
+  }
+
+  .camera-btn, .upload-btn {
+    margin-right: 0.5rem;
+    cursor: pointer;
+    min-width: 120px;
+  }
+
+  .upload-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+  }
+
+  .theme-toggle {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+    transition: background-color 0.2s;
+  }
+
+  .theme-toggle:hover {
+    background-color: var(--bg-secondary);
+  }
+
+  .url-display {
+    margin-bottom: 1rem;
+  }
+
+  .original-url, .final-url {
+    margin-bottom: 0.5rem;
+    padding: 0.75rem;
+    background-color: var(--bg-secondary);
+    border-radius: 0.25rem;
+    word-break: break-all;
+  }
+
+  .final-url {
+    border-left: 4px solid #22c55e;
+    background-color: rgba(34, 197, 94, 0.1);
+  }
+
+  .url-label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+  }
+
+  .url-value {
+    font-family: monospace;
+    font-size: 0.875rem;
+    line-height: 1.4;
   }
 </style>

@@ -45,7 +45,14 @@ export async function startCamera(): Promise<MediaStream> {
   if (!devices) {
     throw new Error('Camera access requires a secure context (HTTPS) and a supported browser');
   }
-  return devices.getUserMedia({ video: { facingMode: 'environment' } });
+  // Use more specific constraints to help browsers remember permissions
+  return devices.getUserMedia({
+    video: {
+      facingMode: 'environment',
+      width: { ideal: 1280 },
+      height: { ideal: 720 }
+    }
+  });
 }
 
 export function stopCamera(stream: MediaStream) {

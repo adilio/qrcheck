@@ -21,30 +21,67 @@ export async function resolveChain(url: string): Promise<ResolveResponse> {
     return { hops: [url], final: url };
   }
   if (!base) {
-    try {
-      const response = await fetch(url, {
+    return await resolveChainLocally(url);
+  }
+  try {
+    const response = await fetch(`${base}/resolve?url=${encodeURIComponent(url)}`, {
+      headers: { accept: 'application/json' }
+    });
+    const data = await response.json();
+    if (!validateResolveResponse(data)) throw new Error('Invalid API response');
+    return data;
+  } catch (err) {
+    console.warn('API redirect check failed, falling back to local:', err);
+    return await resolveChainLocally(url);
+  }
+}
+
+async function resolveChainLocally(url: string): Promise<ResolveResponse> {
+  const hops: string[] = [url];
+  let currentUrl = url;
+  let maxRedirects = 10; // Prevent infinite redirect loops
+  let redirectCount = 0;
+
+  try {
+    while (redirectCount < maxRedirects) {
+      const response = await fetch(currentUrl, {
         method: 'HEAD',
-        redirect: 'follow'
+        redirect: 'manual' // We'll handle redirects manually
       });
 
-      const hops: string[] = [url];
-      if (response.redirected && response.url && response.url !== url) {
-        hops.push(response.url);
-        return { hops, final: response.url };
+      const locationHeader = response.headers.get('location');
+      if (!locationHeader) {
+        // No more redirects
+        break;
       }
 
-      return { hops, final: url };
-    } catch (err) {
-      console.warn('Local redirect check failed:', err);
-      return { hops: [url], final: url };
+      // Handle relative redirects
+      if (locationHeader.startsWith('/')) {
+        const urlObj = new URL(currentUrl);
+        currentUrl = `${urlObj.protocol}//${urlObj.host}${locationHeader}`;
+      } else if (locationHeader.startsWith('http')) {
+        currentUrl = locationHeader;
+      } else {
+        // Handle relative redirects
+        currentUrl = new URL(locationHeader, currentUrl).href;
+      }
+
+      // Check if we've seen this URL before (redirect loop)
+      if (hops.includes(currentUrl)) {
+        break;
+      }
+
+      hops.push(currentUrl);
+      redirectCount++;
     }
+  } catch (err) {
+    console.warn('Local redirect resolution failed:', err);
   }
-  const response = await fetch(`${base}/resolve?url=${encodeURIComponent(url)}`, {
-    headers: { accept: 'application/json' }
-  });
-  const data = await response.json();
-  if (!validateResolveResponse(data)) throw new Error('Invalid API response');
-  return data;
+
+  return {
+    hops,
+    final: hops[hops.length - 1] || url
+  };
 }
 
 export async function intel(url: string): Promise<IntelResponse> {

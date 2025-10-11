@@ -58,9 +58,31 @@ export async function analyzeHeuristics(content: QRContent): Promise<HeuristicRe
   // Check for URL shorteners
   try {
     result.details.shortenerCheck = await checkUrlShortener(url);
-    
+
     if (result.details.shortenerCheck.isShortener) {
-      result.score += 45;
+      // More nuanced scoring for shorteners
+      const domain = result.details.shortenerCheck.domain?.toLowerCase() || '';
+      let shortenerScore = 45; // default score
+
+      // Lower scores for reputable, commonly used shorteners
+      const reputableShorteners = [
+        'bit.ly', 'bitly.com', 't.co', 'tinyurl.com', 'goo.gl', 'ow.ly',
+        'buff.ly', 'short.link', 'lnkd.in', 'fb.me', 'youtu.be', 'twitter.com',
+        'x.com', 'instagram.com', 'tiktok.com'
+      ];
+
+      // Medium scores for legitimate but less common shorteners
+      const mediumRiskShorteners = [
+        'cutt.ly', 'tiny.cc', 'is.gd', 'v.gd', 'bc.vc', 'adf.ly'
+      ];
+
+      if (reputableShorteners.some(rep => domain.includes(rep))) {
+        shortenerScore = 15; // Lower penalty for reputable services
+      } else if (mediumRiskShorteners.some(med => domain.includes(med))) {
+        shortenerScore = 25; // Medium penalty for known legitimate services
+      }
+
+      result.score += shortenerScore;
       result.recommendations.push(
         `URL uses shortener service: ${result.details.shortenerCheck.domain}`
       );
