@@ -144,6 +144,7 @@
   let redirectsOpen = false;
   let intelOpen = false;
   let manualUrlOpen = false;
+  let entryFileInput: HTMLInputElement | null = null;
   let videoEl: HTMLVideoElement | null = null;
   let stream: MediaStream | null = null;
   let scanFrameHandle: number | null = null;
@@ -706,7 +707,7 @@
         </button>
         <label class="primary upload-btn">
           📁 Upload
-          <input type="file" accept="image/*" on:change={handleEntryFile} style="display: none;" />
+          <input type="file" accept="image/*" bind:this={entryFileInput} on:change={handleEntryFile} style="display: none;" />
         </label>
         {#if DEV_ENABLE_MANUAL_URL}
           <button class="secondary manual-btn" type="button" on:click={() => (manualUrlOpen = true)}>
