@@ -1063,16 +1063,17 @@
 
   .theme-toggle {
     background: none;
-    border: none;
+    border: 1px solid var(--border-color);
     font-size: 1.5rem;
     cursor: pointer;
     padding: 0.5rem;
     border-radius: 0.25rem;
-    transition: background-color 0.2s;
+    transition: background-color 0.2s, border-color 0.2s;
   }
 
   .theme-toggle:hover {
     background-color: var(--bg-secondary);
+    border-color: var(--text-secondary);
   }
 
   .url-display {

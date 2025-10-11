@@ -68,7 +68,7 @@ export async function analyzeHeuristics(content: QRContent): Promise<HeuristicRe
       const reputableShorteners = [
         'bit.ly', 'bitly.com', 't.co', 'tinyurl.com', 'goo.gl', 'ow.ly',
         'buff.ly', 'short.link', 'lnkd.in', 'fb.me', 'youtu.be', 'twitter.com',
-        'x.com', 'instagram.com', 'tiktok.com'
+        'x.com', 'instagram.com', 'tiktok.com', 'qrco.de'
       ];
 
       // Medium scores for legitimate but less common shorteners

@@ -44,30 +44,57 @@ async function resolveChainLocally(url: string): Promise<ResolveResponse> {
 
   try {
     while (redirectCount < maxRedirects) {
-      const response = await fetch(currentUrl, {
-        method: 'HEAD',
-        redirect: 'manual' // We'll handle redirects manually
-      });
+      // Try HEAD first, fall back to GET if needed (some shorteners require GET)
+      let response: Response;
+      let locationHeader: string | null = null;
 
-      const locationHeader = response.headers.get('location');
+      try {
+        response = await fetch(currentUrl, {
+          method: 'HEAD',
+          redirect: 'manual',
+          signal: AbortSignal.timeout(5000) // 5 second timeout
+        });
+        locationHeader = response.headers.get('location');
+      } catch (headError) {
+        console.debug('HEAD request failed, trying GET:', headError);
+      }
+
+      // If HEAD didn't give us a location, try GET
+      if (!locationHeader) {
+        try {
+          response = await fetch(currentUrl, {
+            method: 'GET',
+            redirect: 'manual',
+            signal: AbortSignal.timeout(5000)
+          });
+          locationHeader = response.headers.get('location');
+        } catch (getError) {
+          console.debug('GET request also failed:', getError);
+          break;
+        }
+      }
+
       if (!locationHeader) {
         // No more redirects
         break;
       }
 
-      // Handle relative redirects
-      if (locationHeader.startsWith('/')) {
-        const urlObj = new URL(currentUrl);
-        currentUrl = `${urlObj.protocol}//${urlObj.host}${locationHeader}`;
-      } else if (locationHeader.startsWith('http')) {
-        currentUrl = locationHeader;
-      } else {
-        // Handle relative redirects
-        currentUrl = new URL(locationHeader, currentUrl).href;
+      // Handle different types of redirects
+      try {
+        if (locationHeader.startsWith('http')) {
+          currentUrl = locationHeader;
+        } else {
+          // Handle relative redirects
+          currentUrl = new URL(locationHeader, currentUrl).href;
+        }
+      } catch (urlError) {
+        console.warn('Invalid redirect URL:', locationHeader, urlError);
+        break;
       }
 
       // Check if we've seen this URL before (redirect loop)
       if (hops.includes(currentUrl)) {
+        console.warn('Redirect loop detected');
         break;
       }
 
