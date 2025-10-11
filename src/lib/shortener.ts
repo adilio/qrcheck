@@ -27,7 +27,14 @@ export interface ShortenerCheckResult {
  */
 export async function loadShortenerData(): Promise<ShortenerData> {
   try {
-    const response = await fetch('/shorteners.json');
+    const basePath = import.meta.env.BASE_URL ?? '/';
+    const shortenersPath = basePath.endsWith('/')
+      ? `${basePath}shorteners.json`
+      : `${basePath}/shorteners.json`;
+
+    const response = await fetch(shortenersPath, {
+      headers: { accept: 'application/json' }
+    });
     if (!response.ok) {
       throw new Error(`Failed to load shortener data: ${response.status}`);
     }

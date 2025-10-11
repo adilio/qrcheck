@@ -66,7 +66,9 @@ describe('loadShortenerData', () => {
 
     const result = await loadShortenerData();
     
-    expect(mockFetch).toHaveBeenCalledWith('/shorteners.json');
+    expect(mockFetch).toHaveBeenCalledWith('/shorteners.json', {
+      headers: { accept: 'application/json' }
+    });
     expect(result).toEqual(mockShortenerData);
   });
 
