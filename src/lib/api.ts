@@ -17,7 +17,28 @@ function validateResolveResponse(d: unknown): d is ResolveResponse {
 }
 
 export async function resolveChain(url: string): Promise<ResolveResponse> {
-  if (!base) return { hops: [url], final: url };
+  if (!/^https?:/i.test(url)) {
+    return { hops: [url], final: url };
+  }
+  if (!base) {
+    try {
+      const response = await fetch(url, {
+        method: 'HEAD',
+        redirect: 'follow'
+      });
+
+      const hops: string[] = [url];
+      if (response.redirected && response.url && response.url !== url) {
+        hops.push(response.url);
+        return { hops, final: response.url };
+      }
+
+      return { hops, final: url };
+    } catch (err) {
+      console.warn('Local redirect check failed:', err);
+      return { hops: [url], final: url };
+    }
+  }
   const response = await fetch(`${base}/resolve?url=${encodeURIComponent(url)}`, {
     headers: { accept: 'application/json' }
   });
