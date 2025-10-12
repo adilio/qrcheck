@@ -27,7 +27,7 @@
     "@types/node": "^20.11.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
-    "ajv": "^8.12.0",
+    "ajv": "^8.17.1",
     "esbuild": "^0.25.10",
     "eslint": "^8.50.0",
     "jsdom": "^23.0.0",
@@ -38,5 +38,9 @@
     "typescript": "^5.2.0",
     "vite": "^5.4.20",
     "vitest": "^1.0.0"
+  },
+  "dependencies": {
+    "ajv-formats": "^3.0.1",
+    "undici": "^7.16.0"
   }
 }

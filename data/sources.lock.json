@@ -1,0 +1,14 @@
+{
+  "korlabsio": {
+    "etag": "\"ef3ce5c9e4ba5c4cdf58798d03b8621b279d6333c508e91166e36097f952ce29\"",
+    "lastModified": null,
+    "fetchedAt": "2025-10-12T23:44:15.359Z",
+    "url": "https://raw.githubusercontent.com/korlabsio/urlshortener/refs/heads/main/names.txt"
+  },
+  "peterdavehello": {
+    "etag": "\"1e89c4685b2dbf384b60d9a0beebd7df1e446abb56861aa55fb63035474f115d\"",
+    "lastModified": null,
+    "fetchedAt": "2025-10-12T23:44:15.587Z",
+    "url": "https://raw.githubusercontent.com/PeterDaveHello/url-shorteners/refs/heads/master/list"
+  }
+}

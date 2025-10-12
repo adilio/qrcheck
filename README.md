@@ -1,6 +1,6 @@
 # QRCheck
 
-Privacy-first QR code inspection tool that helps you identify potentially malicious QR codes, before you scan them.
+Privacy-first QR code inspection tool that helps you identify potentially malicious QR codes before you scan them and browse to the final URL.
 
 ## Features
 

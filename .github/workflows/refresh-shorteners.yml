@@ -1,0 +1,29 @@
+name: Refresh shortener lists
+on:
+  schedule:
+    - cron: "17 3 * * *"   # nightly
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm i ajv ajv-formats undici
+      - run: node .github/scripts/refresh-shorteners.mjs
+      - name: Commit and push if changed
+        run: |
+          if ! git diff --quiet -- public/shorteners.json data/sources.lock.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add public/shorteners.json data/sources.lock.json
+            git commit -m "chore(data): refresh shortener lists"
+            git push
+          else
+            echo "No changes"
+          fi
