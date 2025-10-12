@@ -1,7 +1,18 @@
 import { test, expect } from '@playwright/test';
 
-test('shows validation when no URL provided', async ({ page }) => {
+test('shows camera functionality and QR scanning interface', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Analyze' }).click();
-  await expect(page.getByRole('alert')).toHaveText('Enter a URL to analyze.');
+
+  // Check that the main interface is displayed
+  await expect(page.getByText('Know before you scan')).toBeVisible();
+  await expect(page.getByText('Get a quick verdict on any QR code without leaving your browser.')).toBeVisible();
+
+  // Check that camera and upload buttons are present
+  await expect(page.getByRole('button', { name: '📷 Camera' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '📁 Upload' })).toBeVisible();
+
+  // Check the step indicators
+  await expect(page.getByText('Point camera')).toBeVisible();
+  await expect(page.getByText('Check verdict')).toBeVisible();
+  await expect(page.getByText('Share safely')).toBeVisible();
 });
