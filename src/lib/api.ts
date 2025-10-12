@@ -75,7 +75,7 @@ async function resolveChainLocally(url: string): Promise<ResolveResponse> {
           if (redirectCount === 0) {
             const urlObj = new URL(currentUrl);
             const domain = urlObj.hostname.toLowerCase();
-            const knownShorteners = ['bit.ly', 'tinyurl.com', 't.co', 'qrco.de', 'buff.ly', 'goo.gl', 'ow.ly'];
+            const knownShorteners = ['bit.ly', 'tinyurl.com', 't.co', 'qrco.de', 'buff.ly', 'goo.gl', 'ow.ly', 'tiny.cc'];
             if (knownShorteners.some(shortener => domain.includes(shortener))) {
               console.info(`Redirect expansion blocked by CORS for ${domain}. This is expected for some shorteners.`);
             }
@@ -119,7 +119,7 @@ async function resolveChainLocally(url: string): Promise<ResolveResponse> {
   if (hops.length === 1 && redirectCount === 0) {
     const urlObj = new URL(url);
     const domain = urlObj.hostname.toLowerCase();
-    const knownShorteners = ['bit.ly', 'tinyurl.com', 't.co', 'qrco.de', 'buff.ly', 'goo.gl', 'ow.ly'];
+    const knownShorteners = ['bit.ly', 'tinyurl.com', 't.co', 'qrco.de', 'buff.ly', 'goo.gl', 'ow.ly', 'tiny.cc'];
     if (knownShorteners.some(shortener => domain.includes(shortener))) {
       console.info(`This is a shortened URL from ${domain}. Redirect expansion may be limited by browser security policies.`);
     }

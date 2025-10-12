@@ -61,6 +61,38 @@ async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit, tim
   }
 }
 
+// CORS proxy function for known shorteners that block cross-origin requests
+async function fetchViaProxy(url: string, timeoutMs: number): Promise<{ success: boolean; location?: string; error?: string }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    // Use a public CORS proxy service
+    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+    const response = await fetch(proxyUrl, {
+      method: 'GET',
+      signal: controller.signal,
+      headers: { 'Accept': 'application/json, text/plain, */*' }
+    });
+
+    if (!response.ok) {
+      return { success: false, error: `Proxy returned status: ${response.status}` };
+    }
+
+    // The proxy will follow redirects automatically, but we need to check the final URL
+    // Unfortunately, allorigins doesn't expose the final URL, so we'll use a different approach
+
+    return { success: false, error: 'Proxy method not available for redirect detection' };
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return { success: false, error: 'timeout' };
+    }
+    return { success: false, error: error.message };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export interface ExpandOptions {
   bypassCache?: boolean;
 }
@@ -130,6 +162,15 @@ export async function expandUrl(originalUrl: string, options: ExpandOptions = {}
         reason = 'timeout';
       } else {
         reason = 'network_error';
+
+        // Check if this is a known shortener and provide helpful context
+        if (hops === 1) {
+          const domain = currentUrl.hostname.toLowerCase();
+          const knownShorteners = ['bit.ly', 'tinyurl.com', 't.co', 'qrco.de', 'buff.ly', 'goo.gl', 'ow.ly', 'tiny.cc'];
+          if (knownShorteners.some(shortener => domain.includes(shortener))) {
+            console.info(`Redirect expansion blocked by CORS for ${domain}. This is expected for some shorteners due to browser security policies.`);
+          }
+        }
       }
       break;
     }
@@ -150,6 +191,15 @@ export async function expandUrl(originalUrl: string, options: ExpandOptions = {}
           reason = 'timeout';
         } else {
           reason = 'network_error';
+
+          // Check if this is a known shortener and provide helpful context
+          if (hops === 1) {
+            const domain = currentUrl.hostname.toLowerCase();
+            const knownShorteners = ['bit.ly', 'tinyurl.com', 't.co', 'qrco.de', 'buff.ly', 'goo.gl', 'ow.ly', 'tiny.cc'];
+            if (knownShorteners.some(shortener => domain.includes(shortener))) {
+              console.info(`Redirect expansion blocked by CORS for ${domain}. Both HEAD and GET requests failed due to browser security policies.`);
+            }
+          }
         }
         break;
       }

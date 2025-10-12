@@ -4,8 +4,7 @@
   import { decodeQRFromFile, decodeQRFromImageData, parseQRContent, type QRContent } from './lib/decode';
   import { analyzeHeuristics, formatHeuristicResults } from './lib/heuristics';
   import { resolveChain, intel, type IntelResponse } from './lib/api';
-  import { expandUrl } from './lib/expand';
-  import { startCamera, stopCamera } from './lib/camera';
+    import { startCamera, stopCamera } from './lib/camera';
 
   type VerdictKey = 'SAFE' | 'WARN' | 'BLOCK';
   type IntelStatus = 'clean' | 'warn' | 'block' | 'info' | 'error';
@@ -332,23 +331,13 @@
     try {
       step = 'Following redirects…';
 
-      // Use the newer expandUrl function for better redirect resolution
-      const expansion = await expandUrl(raw);
-      hops = expansion.chain;
-      urlText = expansion.finalUrl; // Update urlText to the final URL
-
-      // Check if expansion failed but we detected a shortener
-      if (expansion.reason && hops.length === 1) {
-        const urlObj = new URL(raw);
-        const domain = urlObj.hostname.toLowerCase();
-        const knownShorteners = ['bit.ly', 'tinyurl.com', 't.co', 'qrco.de', 'buff.ly', 'goo.gl', 'ow.ly'];
-        if (knownShorteners.some(shortener => domain.includes(shortener))) {
-          console.info(`Shortened URL detected from ${domain}, but redirect expansion failed: ${expansion.reason}`);
-        }
-      }
+      // Use resolveChain for better CORS handling with known shorteners
+      const redirectResult = await resolveChain(raw);
+      hops = redirectResult.hops;
+      urlText = redirectResult.final; // Update urlText to the final URL
 
       step = 'Checking threat intel…';
-      intelRes = await intel(expansion.finalUrl || raw);
+      intelRes = await intel(redirectResult.final || raw);
 
       flow = 'complete';
     } finally {
