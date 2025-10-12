@@ -1,5 +1,8 @@
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
+type IDBValidKey = number | string | Date | ArrayBufferView | ArrayBuffer | IDBArrayKey;
+type IDBArrayKey = [IDBValidKey, ...IDBValidKey[]];
+
 type CacheEntry<T> = {
   value: T;
   createdAt: number;
@@ -51,6 +54,9 @@ async function openDatabase(name: string, store: string): Promise<IDBDatabase> {
     };
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve(request.result);
+    request.onblocked = () => {
+      console.warn('Database blocked - this can happen if multiple tabs are accessing it');
+    };
   });
 }
 
@@ -60,11 +66,15 @@ async function idbStore<T>(dbName: string, storeName: string): Promise<StoreBack
   return {
     async get(key) {
       return await new Promise<CacheEntry<T> | undefined>((resolve, reject) => {
-        const tx = db.transaction(storeName, 'readonly');
-        const store = tx.objectStore(storeName);
-        const req = store.get(key);
-        req.onerror = () => reject(req.error);
-        req.onsuccess = () => resolve(req.result as CacheEntry<T> | undefined);
+        try {
+          const tx = db.transaction(storeName, 'readonly');
+          const store = tx.objectStore(storeName);
+          const req = store.get(key);
+          req.onerror = () => reject(req.error);
+          req.onsuccess = () => resolve(req.result as CacheEntry<T> | undefined);
+        } catch (error) {
+          reject(error);
+        }
       });
     },
     async set(key, value) {
@@ -91,7 +101,6 @@ async function idbStore<T>(dbName: string, storeName: string): Promise<StoreBack
         const store = tx.objectStore(storeName);
         const req = store.getAll();
         const keyReq = store.getAllKeys();
-        const result: Array<[string, CacheEntry<T>]> = [];
         let values: CacheEntry<T>[] | undefined;
         let keys: IDBValidKey[] | undefined;
         req.onerror = keyReq.onerror = () => reject(req.error ?? keyReq.error);

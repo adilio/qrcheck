@@ -1,5 +1,7 @@
 const CAMERA_FLAG = 'qrcheck_camera_ok';
 
+type PermissionState = 'granted' | 'denied' | 'prompt';
+
 type LegacyNavigator = Navigator & {
   getUserMedia?: typeof navigator.mediaDevices.getUserMedia;
   webkitGetUserMedia?: typeof navigator.mediaDevices.getUserMedia;
@@ -69,7 +71,7 @@ export async function getPermissionState(): Promise<PermissionState | 'prompt'> 
   if (!('permissions' in navigator)) return 'prompt';
 
   try {
-    const status = await navigator.permissions.query({ name: 'camera' as PermissionName });
+    const status = await navigator.permissions.query({ name: 'camera' });
     return status.state;
   } catch {
     return 'prompt';
