@@ -6,19 +6,15 @@
  */
 
 export interface ShortenerData {
+  version: number;
+  generatedAt: string;
+  count: number;
   domains: string[];
-  patterns: string[];
-  metadata: {
-    version: string;
-    lastUpdated: string;
-    source: string;
-  };
 }
 
 export interface ShortenerCheckResult {
   isShortener: boolean;
   domain: string | null;
-  matchedPattern: string | null;
   knownServices: string[];
 }
 
@@ -43,13 +39,10 @@ export async function loadShortenerData(): Promise<ShortenerData> {
     console.error('Error loading shortener data:', error);
     // Return empty data as fallback
     return {
-      domains: [],
-      patterns: [],
-      metadata: {
-        version: '0.0.0',
-        lastUpdated: '',
-        source: 'fallback'
-      }
+      version: 1,
+      generatedAt: new Date().toISOString(),
+      count: 0,
+      domains: []
     };
   }
 }
@@ -68,22 +61,10 @@ export async function checkUrlShortener(url: string): Promise<ShortenerCheckResu
     
     // Check against known domains
     const matchingDomain = shortenerData.domains.find(d => domain === d || domain.endsWith(`.${d}`));
-    
-    // Check against regex patterns
-    const matchingPattern = shortenerData.patterns.find(pattern => {
-      try {
-        const regex = new RegExp(pattern, 'i');
-        return regex.test(url);
-      } catch (e) {
-        console.warn(`Invalid regex pattern: ${pattern}`, e);
-        return false;
-      }
-    });
-    
+
     return {
-      isShortener: !!matchingDomain || !!matchingPattern,
+      isShortener: !!matchingDomain,
       domain: matchingDomain || null,
-      matchedPattern: matchingPattern || null,
       knownServices: shortenerData.domains
     };
   } catch (error) {
@@ -91,7 +72,6 @@ export async function checkUrlShortener(url: string): Promise<ShortenerCheckResu
     return {
       isShortener: false,
       domain: null,
-      matchedPattern: null,
       knownServices: []
     };
   }
@@ -115,22 +95,10 @@ export async function checkMultipleUrls(urls: string[]): Promise<Map<string, Sho
       
       // Check against known domains
       const matchingDomain = shortenerData.domains.find(d => domain === d || domain.endsWith(`.${d}`));
-      
-      // Check against regex patterns
-      const matchingPattern = shortenerData.patterns.find(pattern => {
-        try {
-          const regex = new RegExp(pattern, 'i');
-          return regex.test(url);
-        } catch (e) {
-          console.warn(`Invalid regex pattern: ${pattern}`, e);
-          return false;
-        }
-      });
-      
+
       results.set(url, {
-        isShortener: !!matchingDomain || !!matchingPattern,
+        isShortener: !!matchingDomain,
         domain: matchingDomain || null,
-        matchedPattern: matchingPattern || null,
         knownServices: shortenerData.domains
       });
     } catch (error) {
@@ -138,7 +106,6 @@ export async function checkMultipleUrls(urls: string[]): Promise<Map<string, Sho
       results.set(url, {
         isShortener: false,
         domain: null,
-        matchedPattern: null,
         knownServices: shortenerData.domains
       });
     }
@@ -150,7 +117,11 @@ export async function checkMultipleUrls(urls: string[]): Promise<Map<string, Sho
 /**
  * Gets metadata about the shortener database
  */
-export async function getShortenerMetadata(): Promise<ShortenerData['metadata']> {
+export async function getShortenerMetadata() {
   const data = await loadShortenerData();
-  return data.metadata;
+  return {
+    version: data.version,
+    generatedAt: data.generatedAt,
+    count: data.count
+  };
 }
