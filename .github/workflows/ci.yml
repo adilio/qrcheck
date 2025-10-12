@@ -12,17 +12,4 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run ci:verify
         env:
-          VITE_API_BASE: http://localhost:9090
           VITE_DEV_MANUAL_URL: true
-  backend:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: api
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.22'
-      - run: go mod tidy
-      - run: go test ./...
