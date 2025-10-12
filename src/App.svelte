@@ -133,6 +133,7 @@
   let heuristicsResult: any = null;
   let formattedHeuristics: any = null;
   let hops: string[] = [];
+  let redirectExpansionBlocked = false;
   let intelRes: IntelResponse | null = null;
   let error = '';
   let cameraError = '';
@@ -235,6 +236,7 @@
     heuristicsResult = null;
     formattedHeuristics = null;
     hops = [];
+    redirectExpansionBlocked = false;
     intelRes = null;
     learnMoreOpen = false;
     checksOpen = false;
@@ -331,10 +333,19 @@
     try {
       step = 'Following redirects…';
 
+      // Check if this is a known shortener first
+      const urlObj = new URL(raw);
+      const domain = urlObj.hostname.toLowerCase();
+      const knownShorteners = ['bit.ly', 'tinyurl.com', 't.co', 'qrco.de', 'buff.ly', 'goo.gl', 'ow.ly', 'tiny.cc'];
+      const isKnownShortener = knownShorteners.some(shortener => domain.includes(shortener));
+
       // Use resolveChain for better CORS handling with known shorteners
       const redirectResult = await resolveChain(raw);
       hops = redirectResult.hops;
       urlText = redirectResult.final; // Update urlText to the final URL
+
+      // Check if redirect expansion was blocked (only one hop means no expansion happened)
+      redirectExpansionBlocked = isKnownShortener && hops.length === 1;
 
       step = 'Checking threat intel…';
       intelRes = await intel(redirectResult.final || raw);
@@ -801,8 +812,13 @@
             </div>
           {:else if hops.length === 1}
             <div class="redirect-summary single">
-              <span class="redirect-count">No redirects</span>
-              <span class="redirect-info">Direct link - no expansion needed</span>
+              {#if redirectExpansionBlocked}
+                <span class="redirect-count">⚠️ Redirects blocked</span>
+                <span class="redirect-info">Browser security prevents expansion of this shortened link</span>
+              {:else}
+                <span class="redirect-count">No redirects</span>
+                <span class="redirect-info">Direct link - no expansion needed</span>
+              {/if}
             </div>
           {/if}
         </div>
