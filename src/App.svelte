@@ -4,6 +4,7 @@
   import { decodeQRFromFile, decodeQRFromImageData, parseQRContent, type QRContent } from './lib/decode';
   import { analyzeHeuristics, formatHeuristicResults } from './lib/heuristics';
   import { resolveChain, intel, type IntelResponse } from './lib/api';
+  import { expandUrl } from './lib/expand';
   import { startCamera, stopCamera } from './lib/camera';
 
   type VerdictKey = 'SAFE' | 'WARN' | 'BLOCK';
@@ -330,20 +331,24 @@
   async function runUrlAnalysis(raw: string) {
     try {
       step = 'Following redirects…';
-      const chain = await resolveChain(raw);
-      hops = chain.hops;
 
-      // If we detected a shortener but couldn't resolve redirects, add a helpful note
-      const urlObj = new URL(raw);
-      const domain = urlObj.hostname.toLowerCase();
-      const knownShorteners = ['bit.ly', 'tinyurl.com', 't.co', 'qrco.de', 'buff.ly', 'goo.gl', 'ow.ly'];
-      if (knownShorteners.some(shortener => domain.includes(shortener)) && hops.length === 1) {
-        // It's a known shortener but we couldn't resolve the redirect
-        console.info(`Shortened URL detected from ${domain}, but redirect expansion is limited by browser security.`);
+      // Use the newer expandUrl function for better redirect resolution
+      const expansion = await expandUrl(raw);
+      hops = expansion.chain;
+      urlText = expansion.finalUrl; // Update urlText to the final URL
+
+      // Check if expansion failed but we detected a shortener
+      if (expansion.reason && hops.length === 1) {
+        const urlObj = new URL(raw);
+        const domain = urlObj.hostname.toLowerCase();
+        const knownShorteners = ['bit.ly', 'tinyurl.com', 't.co', 'qrco.de', 'buff.ly', 'goo.gl', 'ow.ly'];
+        if (knownShorteners.some(shortener => domain.includes(shortener))) {
+          console.info(`Shortened URL detected from ${domain}, but redirect expansion failed: ${expansion.reason}`);
+        }
       }
 
       step = 'Checking threat intel…';
-      intelRes = await intel(chain.final || raw);
+      intelRes = await intel(expansion.finalUrl || raw);
 
       flow = 'complete';
     } finally {
@@ -797,6 +802,19 @@
               <span class="url-label">Final destination:</span>
               <span class="url-value">{hops[hops.length - 1]}</span>
             </div>
+            <div class="redirect-summary">
+              <span class="redirect-count">
+                {hops.length - 1} redirect{hops.length - 1 > 1 ? 's' : ''}
+              </span>
+              <span class="redirect-info">
+                Shortened link expanded to show true destination
+              </span>
+            </div>
+          {:else if hops.length === 1}
+            <div class="redirect-summary single">
+              <span class="redirect-count">No redirects</span>
+              <span class="redirect-info">Direct link - no expansion needed</span>
+            </div>
           {/if}
         </div>
       {:else}
@@ -838,13 +856,18 @@
         {/if}
       </details>
 
-      {#if qrContent?.type === 'url' && hops.length}
+      {#if qrContent?.type === 'url' && hops.length > 1}
         <details class="drawer" bind:open={redirectsOpen}>
-          <summary>Redirect history</summary>
+          <summary>📊 Redirect path ({hops.length} total)</summary>
+          <div class="redirect-preview">
+            <div class="redirect-path">{hops[0]} → … → {hops[hops.length - 1]}</div>
+          </div>
           <ol class="redirect-list">
             {#each hops as hop, index}
               <li>
-                <span class="redirect-index">{index + 1}</span>
+                <span class="redirect-index">
+                  {index === 0 ? '📍 Start' : index === hops.length - 1 ? '🎯 Final' : `${index + 1}.`}
+                </span>
                 <span class="redirect-url">{hop}</span>
               </li>
             {/each}
@@ -1087,6 +1110,62 @@
   .final-url {
     border-left: 4px solid #22c55e;
     background-color: rgba(34, 197, 94, 0.1);
+  }
+
+  .redirect-summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    background-color: var(--bg-secondary);
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    margin-top: 0.5rem;
+  }
+
+  .redirect-summary.single {
+    justify-content: center;
+    background-color: rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+  }
+
+  .redirect-count {
+    font-weight: 600;
+    color: #f59e0b;
+  }
+
+  .redirect-info {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+  }
+
+  .redirect-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .redirect-list li {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .redirect-preview {
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    background-color: var(--bg-secondary);
+    border-radius: 0.25rem;
+    border-left: 4px solid #3b82f6;
+  }
+
+  .redirect-path {
+    font-family: monospace;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+    word-break: break-all;
   }
 
   .url-label {
