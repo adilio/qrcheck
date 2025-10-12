@@ -149,6 +149,9 @@
   let videoEl: HTMLVideoElement | null = null;
   let stream: MediaStream | null = null;
   let scanFrameHandle: number | null = null;
+  let copyFeedback = '';
+  let copyFeedbackTimeout: number | null = null;
+  let originalInputUrl = '';
 
   const captureCanvas = document.createElement('canvas');
   const captureCtx = captureCanvas.getContext('2d');
@@ -238,6 +241,7 @@
     hops = [];
     redirectExpansionBlocked = false;
     intelRes = null;
+    originalInputUrl = '';
     learnMoreOpen = false;
     checksOpen = false;
     redirectsOpen = false;
@@ -303,13 +307,14 @@
 
   async function processDecoded(raw: string) {
     urlText = raw;
+    originalInputUrl = raw; // Store the original input URL immediately
     try {
       // Parse the QR content
       qrContent = parseQRContent(raw);
-      
+
       // Run heuristics analysis
       await runHeuristicsAnalysis(qrContent);
-      
+
       // If it's a URL, continue with additional checks
       if (qrContent.type === 'url') {
         await runUrlAnalysis(raw);
@@ -500,6 +505,48 @@
     } catch (err: any) {
       error = err?.message || 'Unable to process clipboard content.';
     }
+  }
+
+  async function copyToClipboard(text: string) {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        showCopyFeedback('✅ Copied!');
+      } else {
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        textArea.remove();
+        showCopyFeedback('✅ Copied!');
+      }
+    } catch (err) {
+      console.error('Failed to copy text:', err);
+      showCopyFeedback('❌ Failed to copy');
+    }
+  }
+
+  function showCopyFeedback(message: string) {
+    copyFeedback = message;
+    if (copyFeedbackTimeout) {
+      clearTimeout(copyFeedbackTimeout);
+    }
+    copyFeedbackTimeout = setTimeout(() => {
+      copyFeedback = '';
+      copyFeedbackTimeout = null;
+    }, 2000);
+  }
+
+  function getCopyButtonClass() {
+    if (copyFeedback.includes('✅')) return 'copy-btn success';
+    if (copyFeedback.includes('❌')) return 'copy-btn error';
+    return 'copy-btn';
   }
 
   
@@ -723,9 +770,9 @@
           <span class="status-pill">{step}</span>
         {/if}
       </div>
-      {#if urlText && flow === 'complete'}
+      {#if originalInputUrl && flow === 'complete'}
         <p class="last-scan">
-          Last scanned: <span>{urlText}</span>
+          Last scanned: <span>{originalInputUrl}</span>
         </p>
       {/if}
     </div>
@@ -793,34 +840,54 @@
 
       {#if qrContent?.type === 'url'}
         <div class="url-display">
-          <div class="original-url">
-            <span class="url-label">Original URL:</span>
-            <span class="url-value">{urlText}</span>
+          <div class="input-url-section">
+            <h4>URL Analysis</h4>
+            <div class="original-url">
+              <span class="url-label">📍 Input URL:</span>
+              <span class="url-value">{originalInputUrl}</span>
+              <button class="copy-btn-small" type="button" on:click={() => copyToClipboard(originalInputUrl)} title="Copy input URL">
+                📋
+              </button>
+            </div>
           </div>
-          {#if hops.length > 1}
-            <div class="final-url">
-              <span class="url-label">Final destination:</span>
-              <span class="url-value">{hops[hops.length - 1]}</span>
-            </div>
-            <div class="redirect-summary">
-              <span class="redirect-count">
-                {hops.length - 1} redirect{hops.length - 1 > 1 ? 's' : ''}
-              </span>
-              <span class="redirect-info">
-                Shortened link expanded to show true destination
-              </span>
-            </div>
-          {:else if hops.length === 1}
-            <div class="redirect-summary single">
-              {#if redirectExpansionBlocked}
-                <span class="redirect-count">⚠️ Redirects blocked</span>
-                <span class="redirect-info">Browser security prevents expansion of this shortened link</span>
-              {:else}
-                <span class="redirect-count">No redirects</span>
-                <span class="redirect-info">Direct link - no expansion needed</span>
-              {/if}
-            </div>
-          {/if}
+
+          <div class="resolution-section">
+            <h4>Resolution Results</h4>
+            {#if hops.length > 1}
+              <div class="resolved-url">
+                <span class="url-label">🎯 Resolved URL (Terminal Endpoint):</span>
+                <span class="url-value">{hops[hops.length - 1]}</span>
+                <button class="{getCopyButtonClass()}" type="button" on:click={() => copyToClipboard(hops[hops.length - 1])} title="Copy resolved URL">
+                  {copyFeedback || '📋 Copy'}
+                </button>
+              </div>
+              <div class="redirect-summary">
+                <span class="redirect-count">
+                  {hops.length - 1} redirect{hops.length - 1 > 1 ? 's' : ''}
+                </span>
+                <span class="redirect-info">
+                  Shortened link expanded to show true destination
+                </span>
+              </div>
+            {:else if hops.length === 1}
+              <div class="resolved-url">
+                <span class="url-label">🎯 Resolved URL (Terminal Endpoint):</span>
+                <span class="url-value">{hops[0]}</span>
+                <button class="{getCopyButtonClass()}" type="button" on:click={() => copyToClipboard(hops[0])} title="Copy resolved URL">
+                  {copyFeedback || '📋 Copy'}
+                </button>
+              </div>
+              <div class="redirect-summary single">
+                {#if redirectExpansionBlocked}
+                  <span class="redirect-count">⚠️ Redirects blocked</span>
+                  <span class="redirect-info">Browser security prevents expansion of this shortened link</span>
+                {:else}
+                  <span class="redirect-count">No redirects</span>
+                  <span class="redirect-info">Direct link - no expansion needed</span>
+                {/if}
+              </div>
+            {/if}
+          </div>
         </div>
       {:else}
         <div class="content-type">
@@ -863,7 +930,7 @@
 
       {#if qrContent?.type === 'url' && hops.length > 1}
         <details class="drawer" bind:open={redirectsOpen}>
-          <summary>📊 Redirect path ({hops.length} total)</summary>
+          <summary>📊 Redirect Chain ({hops.length} hops)</summary>
           <div class="redirect-preview">
             <div class="redirect-path">{hops[0]} → … → {hops[hops.length - 1]}</div>
           </div>
@@ -871,7 +938,7 @@
             {#each hops as hop, index}
               <li>
                 <span class="redirect-index">
-                  {index === 0 ? '📍 Start' : index === hops.length - 1 ? '🎯 Final' : `${index + 1}.`}
+                  {index === 0 ? '📍 Start' : index === hops.length - 1 ? '🎯 Terminal' : `${index + 1}.`}
                 </span>
                 <span class="redirect-url">{hop}</span>
               </li>
@@ -1102,6 +1169,33 @@
   
   .url-display {
     margin-bottom: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .input-url-section, .resolution-section {
+    background-color: var(--bg-secondary);
+    border-radius: 0.5rem;
+    padding: 1rem;
+  }
+
+  .input-url-section h4, .resolution-section h4 {
+    margin: 0 0 0.75rem 0;
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  .original-url {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    background-color: var(--bg-tertiary);
+    border-radius: 0.25rem;
+    border-left: 4px solid #3b82f6;
+    word-break: break-all;
   }
 
   .original-url, .final-url {
@@ -1112,9 +1206,62 @@
     word-break: break-all;
   }
 
-  .final-url {
-    border-left: 4px solid #22c55e;
+  .resolved-url {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.75rem;
     background-color: rgba(34, 197, 94, 0.1);
+    border-radius: 0.25rem;
+    border-left: 4px solid #22c55e;
+    word-break: break-all;
+  }
+
+  .copy-btn {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .copy-btn:hover {
+    background: var(--accent-color);
+    color: white;
+  }
+
+  .copy-btn.success {
+    background: #22c55e;
+    color: white;
+    border-color: #22c55e;
+  }
+
+  .copy-btn.error {
+    background: #ef4444;
+    color: white;
+    border-color: #ef4444;
+  }
+
+  .copy-btn-small {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 0.25rem;
+    padding: 0.25rem 0.375rem;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    min-width: 2rem;
+    height: 2rem;
+    flex-shrink: 0;
+  }
+
+  .copy-btn-small:hover {
+    background: var(--accent-color);
+    color: white;
   }
 
   .redirect-summary {

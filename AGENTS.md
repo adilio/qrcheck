@@ -104,7 +104,69 @@ Key interaction flow inside `App.svelte`:
 - Tests: `api/cmd/qrcheck/main_test.go` (redirect helpers, rate limiter, PhishTank behaviour).
 - Deployment: `api/Dockerfile`, `api/fly.toml`; environment variables include `CORS_ORIGIN`, `PHISHTANK_API_KEY`, optional Google Safe Browsing keys.
 
-The Go service is optional. When `VITE_API_BASE` is unset, the frontend falls back to client-only analysis while intel cards surface “Not checked”.
+The Go service is optional. When `VITE_API_BASE` is unset, the frontend falls back to client-only analysis while intel cards surface "Not checked".
+
+## CORS Bypass for Redirect Expansion
+
+### The Problem
+Browser security policies prevent cross-origin requests to shorteners like `tiny.cc`, `bit.ly`, etc. When scanning QR codes containing these URLs, the frontend cannot follow redirects to reveal the final destination, showing misleading "No redirects" messages.
+
+### Solution: Deploy Go API for Server-Side Redirect Resolution
+
+The Go microservice in `/api/` bypasses CORS by making server-side HTTP requests that aren't subject to browser restrictions. It follows redirects using HEAD/GET requests with browser-like User-Agent headers and returns the complete redirect chain.
+
+### Free Deployment Options
+
+1. **Railway** (Recommended)
+   - Free tier: $5/month credit + community credit
+   - Native Go support
+   - CLI deployment: `railway login && railway init && railway up`
+   - Sleeps after 30min inactivity, wakes on request
+
+2. **Render**
+   - Free tier: Web services with 15min sleep
+   - GitHub integration for easy deployment
+   - Native Go support
+
+3. **Replit**
+   - Free tier: Always-on for hobby projects
+   - Go support available
+   - Usage caps apply
+
+### Deployment Steps (Railway Example)
+
+```bash
+# Install Railway CLI
+npm install -g @railway/cli
+
+# From the project root
+cd api
+railway login
+railway init
+railway up
+```
+
+### Configuration
+
+1. Set `VITE_API_BASE` environment variable to your deployed API URL
+2. Example: `VITE_API_BASE=https://your-app-name.up.railway.app`
+3. Frontend will automatically use the API for redirect expansion when available
+4. Falls back gracefully to client-side analysis with appropriate messaging
+
+### Implementation Details
+
+- The Go API uses `resolveChainLocally()` with HEAD/GET fallback strategy
+- Browser User-Agent headers to avoid bot detection
+- 10 redirect limit with loop detection
+- Returns JSON with `hops` array and `final` URL
+- Frontend displays enhanced redirect information when available
+
+### Fallback Behavior
+
+When API is unavailable or CORS blocks requests:
+- Shows "⚠️ Redirects blocked - Browser security prevents expansion" for known shorteners
+- Provides transparent messaging about limitations
+- Maintains all other security analysis features
 
 ---
 

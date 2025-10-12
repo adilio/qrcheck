@@ -53,6 +53,65 @@ QRCheck provides a risk score from 0-100 with three risk levels:
 - **Medium Risk (40-69)**: Some suspicious patterns detected
 - **High Risk (70+)**: Multiple risk factors or highly suspicious patterns
 
+## URL Resolution & Link Analysis (Stage 1)
+
+QRCheck implements redirect enumeration and endpoint identification using a Netlify Function for secure URL resolution.
+
+### Run Locally with Netlify
+
+```bash
+# Install dependencies (includes Netlify CLI)
+npm install
+
+# Build the project
+npm run build
+
+# Run with Netlify Functions (recommended for full functionality)
+npm run dev:netlify
+```
+
+When running with `npm run dev:netlify`, the application will be available at `http://localhost:8888` with full URL resolution capabilities.
+
+### API Endpoint
+
+**POST** `/api/resolve`
+
+Request body:
+```json
+{
+  "url": "https://example.com"
+}
+```
+
+Response fields:
+- `resolved_url`: Terminal endpoint after following redirects
+- `redirect_chain`: Ordered list of all URLs in the redirect chain
+- `hop_count`: Total number of redirects traversed
+
+Example response:
+```json
+{
+  "ok": true,
+  "analysis": {
+    "input_url": "https://bit.ly/example",
+    "redirect_chain": [
+      "https://bit.ly/example",
+      "https://intermediate.com/redirect",
+      "https://target-site.com/login"
+    ],
+    "resolved_url": "https://target-site.com/login",
+    "hop_count": 3
+  }
+}
+```
+
+### Security Features
+
+- **Server-side Resolution**: URL resolution happens on the server to avoid CORS limitations
+- **Controlled Redirect Tracing**: Maximum of 10 hops with 5-second timeout per request
+- **Input Validation**: Validates URL format and length before processing
+- **No Caching**: Results are not cached to ensure fresh analysis
+
 ## Development
 
 ### Prerequisites
@@ -66,8 +125,11 @@ QRCheck provides a risk score from 0-100 with three risk levels:
 # Install dependencies
 npm install
 
-# Run development server
+# Run development server (basic, without URL resolution)
 npm run dev
+
+# Run with Netlify Functions (full functionality)
+npm run dev:netlify
 
 # Run tests
 npm test

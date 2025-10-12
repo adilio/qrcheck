@@ -1,0 +1,24 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- src/ public/ functions/"
+
+[dev]
+  command = "npm run dev"
+  functions = "functions"
+  publish = "dist"
+  port = 8888
+  targetPort = 5173
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains; preload"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    Permissions-Policy = "camera=(self), clipboard-read=(self)"
