@@ -53,28 +53,28 @@ QRCheck provides a risk score from 0-100 with three risk levels:
 - **Medium Risk (40-69)**: Some suspicious patterns detected
 - **High Risk (70+)**: Multiple risk factors or highly suspicious patterns
 
-## URL Resolution & Link Analysis (Stage 1)
+## URL Resolution & Link Analysis
 
-QRCheck implements redirect enumeration and endpoint identification using a Netlify Function for secure URL resolution.
+QRCheck implements redirect enumeration and endpoint identification using Netlify Functions for secure URL resolution.
 
-### Run Locally with Netlify
+### Local Development
 
 ```bash
 # Install dependencies (includes Netlify CLI)
 npm install
 
-# Build the project
-npm run build
-
-# Run with Netlify Functions (recommended for full functionality)
+# Run development server with Netlify Functions (recommended)
 npm run dev:netlify
+
+# Or run basic development server without URL resolution
+npm run dev
 ```
 
 When running with `npm run dev:netlify`, the application will be available at `http://localhost:8888` with full URL resolution capabilities.
 
-### API Endpoint
+### Netlify Function API
 
-**POST** `/api/resolve`
+**POST** `/api/resolve` → `/.netlify/functions/resolve`
 
 Request body:
 ```json
@@ -83,12 +83,7 @@ Request body:
 }
 ```
 
-Response fields:
-- `resolved_url`: Terminal endpoint after following redirects
-- `redirect_chain`: Ordered list of all URLs in the redirect chain
-- `hop_count`: Total number of redirects traversed
-
-Example response:
+Response:
 ```json
 {
   "ok": true,
@@ -107,10 +102,11 @@ Example response:
 
 ### Security Features
 
-- **Server-side Resolution**: URL resolution happens on the server to avoid CORS limitations
+- **Server-side Resolution**: URL resolution happens in Netlify Functions to avoid CORS limitations
 - **Controlled Redirect Tracing**: Maximum of 10 hops with 5-second timeout per request
 - **Input Validation**: Validates URL format and length before processing
 - **No Caching**: Results are not cached to ensure fresh analysis
+- **Privacy-First**: No data is stored or tracked
 
 ## Development
 
@@ -125,29 +121,38 @@ Example response:
 # Install dependencies
 npm install
 
-# Run development server (basic, without URL resolution)
-npm run dev
-
-# Run with Netlify Functions (full functionality)
+# Run development server with Netlify Functions (recommended)
 npm run dev:netlify
 
+# Or run basic development server
+npm run dev
+
 # Run tests
-npm test
+npm run test
 
 # Build for production
 npm run build
+
+# Run end-to-end tests
+npm run e2e
+
+# Run full CI verification
+npm run ci:verify
 ```
 
 ### Testing
 
-The project includes comprehensive unit tests for all components:
+The project includes comprehensive unit and end-to-end tests:
 
 ```bash
-# Run all tests
-npm test
+# Run unit tests
+npm run test
 
-# Run tests with coverage
-npm run test:coverage
+# Run end-to-end tests
+npm run e2e
+
+# Run full verification (typecheck, lint, test, e2e, build)
+npm run ci:verify
 ```
 
 ### Architecture
@@ -155,9 +160,11 @@ npm run test:coverage
 - `src/lib/decode.ts` - QR code decoding and content parsing
 - `src/lib/heuristics.ts` - Heuristic analysis engine
 - `src/lib/shortener.ts` - URL shortener detection
-- `src/lib/api.ts` - External API integration
+- `src/lib/api.ts` - Netlify Function API integration
 - `src/lib/camera.ts` - Camera handling for live scanning
 - `src/App.svelte` - Main application component
+- `functions/resolve.ts` - Netlify Function for URL resolution
+- `netlify.toml` - Netlify configuration
 
 ## Contributing
 
