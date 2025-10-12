@@ -7,9 +7,11 @@ test('shows camera functionality and QR scanning interface', async ({ page }) =>
   await expect(page.getByText('Know before you scan')).toBeVisible();
   await expect(page.getByText('Get a quick verdict on any QR code without leaving your browser.')).toBeVisible();
 
-  // Check that camera and upload buttons are present
+  // Check that camera button is present (button)
   await expect(page.getByRole('button', { name: '📷 Camera' })).toBeVisible();
-  await expect(page.getByRole('button', { name: '📁 Upload' })).toBeVisible();
+
+  // Check that upload button is present (label element)
+  await expect(page.getByText('📁 Upload')).toBeVisible();
 
   // Check the step indicators
   await expect(page.getByText('Point camera')).toBeVisible();
