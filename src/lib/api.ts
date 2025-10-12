@@ -116,35 +116,12 @@ async function resolveChainWithFallback(url: string): Promise<ResolveResponse> {
 }
 
 async function resolveViaProxy(url: string): Promise<ResolveResponse> {
-  // Try multiple proxy services in order of reliability
-  const proxies = [
-    {
-      name: 'AllOrigins',
-      url: (target: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`,
-      extractFinalUrl: async (response: Response) => {
-        // This proxy doesn't give us the final URL, so we can't use it for redirect detection
-        throw new Error('Proxy does not expose final URL');
-      }
-    },
-    {
-      name: 'CORS IO',
-      url: (target: string) => `https://cors.io/?${encodeURIComponent(target)}`,
-      extractFinalUrl: async (response: Response) => {
-        // This proxy also doesn't reliably expose final URLs
-        throw new Error('Proxy does not expose final URL');
-      }
-    }
-  ];
-
-  // Try a different approach - use a fetch-based redirect detector
+  // Proxy-based approach is not reliable for redirect detection
+  // Fall back to fetch-based detection
   return await detectRedirectsViaFetch(url);
 }
 
 async function detectRedirectsViaFetch(url: string): Promise<ResolveResponse> {
-  const hops: string[] = [url];
-  let currentUrl = url;
-  const maxRedirects = 10;
-  let redirectCount = 0;
 
   // Use a service that can follow redirects and return the final URL
   try {
@@ -154,7 +131,7 @@ async function detectRedirectsViaFetch(url: string): Promise<ResolveResponse> {
     // For now, let's try using the finalurl.org service (if it exists)
     // or create a simple approach that at least tells us there's a redirect
 
-    const response = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, {
+    await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, {
       method: 'HEAD',
       mode: 'cors'
     });

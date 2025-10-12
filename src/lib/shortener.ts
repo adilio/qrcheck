@@ -1,8 +1,8 @@
 /**
  * URL Shortener Checker
- * 
+ *
  * This module provides functionality to check if URLs use URL shortening services,
- * which can be used to obscure the final destination.
+ * which can be used to obscure the terminal endpoint.
  */
 
 export interface ShortenerData {

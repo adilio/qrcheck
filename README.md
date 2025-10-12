@@ -5,7 +5,7 @@ Privacy-first QR code inspection tool that helps you identify potentially malici
 ## Features
 
 - **Local Analysis**: All checks are performed in your browser, no data is sent to external servers
-- **URL Shortener Detection**: Identifies URLs that use link shortening services which can obscure the final destination
+- **URL Shortener Detection**: Identifies shortened links that can obscure the terminal endpoint
 - **Heuristic Analysis**: Detects suspicious patterns in URLs including:
   - Excessive URL length
   - URL obfuscation techniques
@@ -21,7 +21,7 @@ Privacy-first QR code inspection tool that helps you identify potentially malici
   - WiFi credentials
   - Contact cards (vCard)
   - Geographic locations
-- **Redirect Chain Analysis**: Follows redirects to reveal the final destination
+- **Redirect Chain Analysis**: Follows redirects to reveal the resolved URL (terminal endpoint)
 - **Threat Intelligence**: Optional integration with threat intelligence feeds
 
 ## How It Works
