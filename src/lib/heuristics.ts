@@ -1,5 +1,5 @@
 import { KNOWN_SHORTENER_DOMAINS } from '../data/shorteners';
-import { SUSPICIOUS_TLDS } from '../data/tlds_suspicious';
+import { isSuspiciousTld } from '../data/tlds_suspicious';
 import { SUSPICIOUS_KEYWORDS } from '../data/keywords';
 import type { UrlAnalysisOptions, UrlAnalysisResult, Verdict } from '../types';
 import { expandUrl } from './expand';
@@ -38,7 +38,7 @@ function tldFromHost(host: string): string | null {
 function hasSuspiciousTld(host: string): string | null {
   const tld = tldFromHost(host);
   if (!tld) return null;
-  return SUSPICIOUS_TLDS.includes(tld) ? tld : null;
+  return isSuspiciousTld(tld) ? tld : null;
 }
 
 function hasPunycode(host: string): boolean {

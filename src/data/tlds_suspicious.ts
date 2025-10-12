@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 export const SUSPICIOUS_TLDS = [
-=======
-export const SUSPICIOUS_TLDS: readonly string[] = [
->>>>>>> feat-implement-qrcheck-features-and-modules-aoqij2
   '.zip',
   '.mov',
   '.xyz',
@@ -28,8 +24,12 @@ export const SUSPICIOUS_TLDS: readonly string[] = [
   '.best',
   '.biz',
   '.win'
-<<<<<<< HEAD
-] as const;
-=======
-];
->>>>>>> feat-implement-qrcheck-features-and-modules-aoqij2
+] as const satisfies readonly string[];
+
+export type SuspiciousTld = (typeof SUSPICIOUS_TLDS)[number];
+
+const suspiciousTldSet: ReadonlySet<string> = new Set(SUSPICIOUS_TLDS);
+
+export function isSuspiciousTld(tld: string): tld is SuspiciousTld {
+  return suspiciousTldSet.has(tld);
+}
