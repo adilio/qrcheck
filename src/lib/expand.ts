@@ -1,6 +1,23 @@
 import { TTLCache } from './cache';
 import type { ExpansionFailureReason, RedirectExpansion } from '../types';
 
+type RequestInfo = Request | string | URL;
+type RequestInit = {
+  method?: string;
+  headers?: HeadersInit;
+  body?: BodyInit | null;
+  mode?: RequestMode;
+  credentials?: RequestCredentials;
+  cache?: RequestCache;
+  redirect?: RequestRedirect;
+  referrer?: string;
+  referrerPolicy?: ReferrerPolicy;
+  integrity?: string;
+  keepalive?: boolean;
+  signal?: AbortSignal | null;
+  window?: null;
+};
+
 const MAX_HOPS = 10;
 const PER_HOP_TIMEOUT_MS = 1000;
 const TOTAL_TIMEOUT_MS = 10_000;

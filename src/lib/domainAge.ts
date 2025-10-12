@@ -14,7 +14,7 @@ export interface DomainAgeResult {
 }
 
 const CACHE = new TTLCache<DomainAgeResult>({
-  dbName: 'qrcheck-cache',
+  dbName: 'qrcheck-domain-cache',
   storeName: 'domain-intel',
   maxAgeMs: 24 * 60 * 60 * 1000,
   maxEntries: 200

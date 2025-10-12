@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 export const SUSPICIOUS_TLDS = [
+=======
+export const SUSPICIOUS_TLDS: readonly string[] = [
+>>>>>>> feat-implement-qrcheck-features-and-modules-aoqij2
   '.zip',
   '.mov',
   '.xyz',
@@ -24,4 +28,8 @@ export const SUSPICIOUS_TLDS = [
   '.best',
   '.biz',
   '.win'
+<<<<<<< HEAD
 ] as const;
+=======
+];
+>>>>>>> feat-implement-qrcheck-features-and-modules-aoqij2

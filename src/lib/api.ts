@@ -6,8 +6,8 @@ export interface ResolveResponse {
 }
 
 export interface IntelResponse {
-  urlhaus: any;
-  phishtank: any;
+  urlhaus: unknown;
+  phishtank: unknown;
 }
 
 function validateResolveResponse(d: unknown): d is ResolveResponse {
@@ -39,7 +39,7 @@ export async function resolveChain(url: string): Promise<ResolveResponse> {
 async function resolveChainLocally(url: string): Promise<ResolveResponse> {
   const hops: string[] = [url];
   let currentUrl = url;
-  let maxRedirects = 10; // Prevent infinite redirect loops
+  const maxRedirects = 10; // Prevent infinite redirect loops
   let redirectCount = 0;
 
   try {
