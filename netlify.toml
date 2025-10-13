@@ -15,6 +15,26 @@
   to = "/.netlify/functions/:splat"
   status = 200
 
+# Map intel API
+[[redirects]]
+  from = "/api/intel/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+# Bulk URLHaus hosts cache policy
+[[headers]]
+  for = "/urlhaus/hosts.json"
+  [headers.values]
+    Cache-Control = "public, max-age=3600, must-revalidate"
+    Netlify-CDN-Cache-Control = "public, s-maxage=86400, stale-while-revalidate=600"
+
+# Shortener list cache policy
+[[headers]]
+  for = "/shorteners.json"
+  [headers.values]
+    Cache-Control = "public, max-age=3600, must-revalidate"
+    Netlify-CDN-Cache-Control = "public, s-maxage=86400, stale-while-revalidate=600"
+
 [[headers]]
   for = "/*"
   [headers.values]

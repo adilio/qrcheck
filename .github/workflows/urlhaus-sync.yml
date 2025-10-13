@@ -1,0 +1,26 @@
+name: Sync URLHaus hosts
+on:
+  schedule:
+    - cron: "23 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: node .github/scripts/urlhaus-sync.mjs
+      - name: Commit if changed
+        run: |
+          if ! git diff --quiet -- public/urlhaus/hosts.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add public/urlhaus/hosts.json
+            git commit -m "chore(intel): sync URLHaus hosts"
+            git push
+          else
+            echo "No changes"
+          fi

@@ -198,3 +198,20 @@ export class TTLCache<T> {
     }
   }
 }
+
+// Simple localStorage-based cache for JSON responses
+export async function fetchWithLocalCache<T>(
+  url: string,
+  storageKey: string,
+  ttlMs = 24 * 60 * 60 * 1000
+): Promise<T> {
+  try {
+    const cached = JSON.parse(localStorage.getItem(storageKey) ?? "null");
+    if (cached && Date.now() - Date.parse(cached.savedAt) < ttlMs) return cached.payload as T;
+  } catch {}
+  const res = await fetch(url, { cache: "no-cache" });
+  if (!res.ok) throw new Error(`fetch failed ${res.status}`);
+  const payload = await res.json() as T;
+  localStorage.setItem(storageKey, JSON.stringify({ savedAt: new Date().toISOString(), payload }));
+  return payload;
+}
