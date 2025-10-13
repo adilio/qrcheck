@@ -312,13 +312,14 @@
       // Parse the QR content
       qrContent = parseQRContent(raw);
 
-      // Run heuristics analysis
-      await runHeuristicsAnalysis(qrContent);
-
       // If it's a URL, continue with additional checks
       if (qrContent.type === 'url') {
         await runUrlAnalysis(raw);
+        // Run heuristics analysis after gathering threat intel
+        await runHeuristicsAnalysis(qrContent, intelRes);
       } else {
+        // Run heuristics analysis for non-URL content
+        await runHeuristicsAnalysis(qrContent);
         flow = 'complete';
       }
     } catch (err: any) {
@@ -328,9 +329,9 @@
     }
   }
 
-  async function runHeuristicsAnalysis(content: QRContent) {
+  async function runHeuristicsAnalysis(content: QRContent, intel?: IntelResponse) {
     step = 'Analysing locally…';
-    heuristicsResult = await analyzeHeuristics(content);
+    heuristicsResult = await analyzeHeuristics(content, intel);
     formattedHeuristics = formatHeuristicResults(heuristicsResult);
   }
 

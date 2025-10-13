@@ -36,6 +36,10 @@ export interface HeuristicResult {
       hasSuspiciousTLD: boolean;
       isIPBased: boolean;
     };
+    threatIntel?: {
+      urlhausMatches: number;
+      isMalicious: boolean;
+    };
   };
   recommendations: string[];
 }
@@ -43,7 +47,7 @@ export interface HeuristicResult {
 /**
  * Analyzes QR content for suspicious patterns
  */
-export async function analyzeHeuristics(content: QRContent): Promise<HeuristicResult> {
+export async function analyzeHeuristics(content: QRContent, threatIntel?: any): Promise<HeuristicResult> {
   // Initialize result with low risk
   const result: HeuristicResult = {
     risk: 'low',
@@ -144,6 +148,23 @@ export async function analyzeHeuristics(content: QRContent): Promise<HeuristicRe
   if (result.details.domainReputation.isIPBased) {
     result.score += 35;
     result.recommendations.push('URL uses IP address instead of domain name');
+  }
+
+  // Check threat intelligence (URLHaus)
+  if (threatIntel?.urlhaus) {
+    const urlhausData = threatIntel.urlhaus;
+    const matchCount = urlhausData.matches?.length || 0;
+
+    result.details.threatIntel = {
+      urlhausMatches: matchCount,
+      isMalicious: urlhausData.query_status === 'found' && matchCount > 0
+    };
+
+    if (result.details.threatIntel.isMalicious) {
+      // High risk for known malicious URLs
+      result.score += 80;
+      result.recommendations.push(`⚠️ CRITICAL: URL flagged as malicious by URLHaus (${matchCount} match${matchCount > 1 ? 'es' : ''})`);
+    }
   }
 
   // Determine overall risk level
@@ -361,7 +382,11 @@ export function formatHeuristicResults(result: HeuristicResult): {
   if (result.details.domainReputation?.isIPBased) {
     details.push('Uses IP address instead of domain name');
   }
-  
+
+  if (result.details.threatIntel?.isMalicious) {
+    details.push(`⚠️ CRITICAL: Flagged as malicious by URLHaus (${result.details.threatIntel.urlhausMatches} match${result.details.threatIntel.urlhausMatches > 1 ? 'es' : ''})`);
+  }
+
   return {
     riskColor,
     riskText,
