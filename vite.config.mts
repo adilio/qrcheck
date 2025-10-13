@@ -9,5 +9,13 @@ export default defineConfig(({ command }) => ({
   build: {
     outDir: 'dist',
     sourcemap: true
+  },
+  root: '.',
+  publicDir: 'public',
+  server: {
+    fs: {
+      // Allow serving files from root
+      strict: false
+    }
   }
 }));
