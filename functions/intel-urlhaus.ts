@@ -20,8 +20,18 @@ async function postForm(endpoint: string, form: Record<string, string>, signal: 
     body: new URLSearchParams(form).toString(),
     signal
   });
+
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+  }
+
   const text = await res.text();
-  try { return JSON.parse(text); } catch { return { query_status: "failed", raw: text }; }
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    console.error('Failed to parse URLHaus response:', text, e);
+    return { query_status: "failed", raw: text };
+  }
 }
 
 export const handler: Handler = async (event) => {
@@ -62,6 +72,7 @@ export const handler: Handler = async (event) => {
       body: JSON.stringify({ ok: true, source: "urlhaus", query_status: result?.query_status || "failed", matches })
     };
   } catch (e: any) {
+    console.error('URLHaus lookup failed:', e);
     return { statusCode: 500, body: JSON.stringify({ ok: false, error: e?.message || "lookup error" }) };
   }
 };

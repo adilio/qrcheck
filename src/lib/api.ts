@@ -253,20 +253,42 @@ async function resolveChainLocally(url: string): Promise<ResolveResponse> {
 
 export async function intel(url: string): Promise<IntelResponse> {
   try {
+    // First try the live API lookup
     const response = await fetch('/api/intel/urlhaus', {
       method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'application/json' },
       body: JSON.stringify({ url })
     });
 
-    if (!response.ok) {
-      throw new Error(`URLHaus API returned ${response.status}`);
+    if (response.ok) {
+      const data = await response.json();
+      return { urlhaus: data };
+    } else {
+      console.warn('URLHaus API returned non-OK status:', response.status);
     }
-
-    const data = await response.json();
-    return { urlhaus: data };
   } catch (error) {
-    console.warn('URLHaus lookup failed:', error);
+    console.warn('URLHaus live lookup failed:', error);
+  }
+
+  // Fallback to local cache check
+  try {
+    const { loadUrlhausHosts } = await import('./urlhaus');
+    const hosts = await loadUrlhausHosts();
+
+    // Extract hostname from URL for local cache lookup
+    const hostname = new URL(url).hostname.toLowerCase();
+    const isMalicious = hosts.hosts.includes(hostname);
+
+    return {
+      urlhaus: {
+        ok: true,
+        source: 'urlhaus',
+        query_status: isMalicious ? 'found' : 'no_results',
+        matches: isMalicious ? [{ url, threat: 'known_malicious_host' }] : []
+      }
+    };
+  } catch (cacheError) {
+    console.warn('Local URLHaus cache failed:', cacheError);
     return { urlhaus: null };
   }
 }
