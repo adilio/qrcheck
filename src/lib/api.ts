@@ -17,8 +17,12 @@ export interface ResolveAnalysisResponse {
 }
 
 export interface IntelResponse {
-  urlhaus: unknown;
-  phishtank: unknown;
+  urlhaus: {
+    ok: boolean;
+    source: string;
+    query_status: string;
+    matches: any[];
+  } | null;
 }
 
 function validateResolveResponse(d: unknown): d is ResolveResponse {
@@ -248,11 +252,21 @@ async function resolveChainLocally(url: string): Promise<ResolveResponse> {
 }
 
 export async function intel(url: string): Promise<IntelResponse> {
-  if (!base) return { urlhaus: null, phishtank: null };
-  const response = await fetch(`${base}/intel`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', accept: 'application/json' },
-    body: JSON.stringify({ url })
-  });
-  return response.json();
+  try {
+    const response = await fetch('/api/intel/urlhaus', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({ url })
+    });
+
+    if (!response.ok) {
+      throw new Error(`URLHaus API returned ${response.status}`);
+    }
+
+    const data = await response.json();
+    return { urlhaus: data };
+  } catch (error) {
+    console.warn('URLHaus lookup failed:', error);
+    return { urlhaus: null };
+  }
 }

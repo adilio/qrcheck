@@ -1,1 +1,1 @@
-{ "type": "object", "required": ["urlhaus", "phishtank"], "properties": { "urlhaus": {}, "phishtank": {} } }
+{ "type": "object", "required": ["urlhaus"], "properties": { "urlhaus": { "type": ["object", "null"], "properties": { "ok": { "type": "boolean" }, "source": { "type": "string" }, "query_status": { "type": "string" }, "matches": { "type": "array" } } } } }

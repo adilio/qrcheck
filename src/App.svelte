@@ -579,9 +579,7 @@
     if (!data) return [];
     const cards: IntelCard[] = [];
     const urlHausCard = buildURLHausCard(data.urlhaus);
-    const phishTankCard = buildPhishTankCard(data.phishtank);
     if (urlHausCard) cards.push(urlHausCard);
-    if (phishTankCard) cards.push(phishTankCard);
     return cards;
   }
 
@@ -590,12 +588,12 @@
       return {
         name: 'URLHaus',
         icon: '🌐',
-        status: 'info',
-        headline: 'Not checked',
-        detail: 'Configure VITE_API_BASE to enable redirect lookups.'
+        status: 'error',
+        headline: 'Lookup failed',
+        detail: 'Unable to check URLHaus database.'
       };
     }
-    if (!data) {
+    if (!data || !data.ok) {
       return {
         name: 'URLHaus',
         icon: '🌐',
@@ -614,7 +612,7 @@
         detail: 'This URL is not currently flagged by URLHaus.'
       };
     }
-    if (status === 'error') {
+    if (status === 'error' || status === 'failed') {
       return {
         name: 'URLHaus',
         icon: '🌐',
@@ -623,82 +621,25 @@
         detail: 'URLHaus returned an error. Try again later.'
       };
     }
+    if (data.matches && data.matches.length > 0) {
+      return {
+        name: 'URLHaus',
+        icon: '🌐',
+        status: 'block',
+        headline: `Reported malicious (${data.matches.length} match${data.matches.length > 1 ? 'es' : ''})`,
+        detail: 'This URL is flagged as malicious by URLHaus.'
+      };
+    }
     return {
       name: 'URLHaus',
       icon: '🌐',
-      status: 'block',
-      headline: data.threat ? `Reported ${data.threat}` : 'Listed as malicious',
-      detail: `Status: ${data.url_status || 'unknown'}.`
+      status: 'clean',
+      headline: 'No listings found',
+      detail: 'This URL is not currently flagged by URLHaus.'
     };
   }
 
-  function buildPhishTankCard(data: any): IntelCard | null {
-    if (data === null) {
-      return {
-        name: 'PhishTank',
-        icon: '🎣',
-        status: 'info',
-        headline: 'Not checked',
-        detail: 'Set PHISHTANK_API_KEY to enable phishing lookups.'
-      };
-    }
-    if (!data) {
-      return {
-        name: 'PhishTank',
-        icon: '🎣',
-        status: 'error',
-        headline: 'Lookup failed',
-        detail: 'No response from PhishTank.'
-      };
-    }
-    if (typeof data === 'object' && 'error' in data) {
-      return {
-        name: 'PhishTank',
-        icon: '🎣',
-        status: 'error',
-        headline: 'Feed error',
-        detail: String(data.error)
-      };
-    }
-    const inDb = data?.in_database ?? data?.results?.in_database ?? false;
-    const verified = data?.verified ?? data?.results?.verified ?? false;
-
-    if (inDb && verified) {
-      return {
-        name: 'PhishTank',
-        icon: '🎣',
-        status: 'block',
-        headline: 'Verified phishing',
-        detail: 'This URL is confirmed as phishing by PhishTank.'
-      };
-    }
-    if (inDb) {
-      return {
-        name: 'PhishTank',
-        icon: '🎣',
-        status: 'warn',
-        headline: 'Reported phishing',
-        detail: 'Listed in PhishTank but verification is pending.'
-      };
-    }
-    if (data?.ok === true || !inDb) {
-      return {
-        name: 'PhishTank',
-        icon: '🎣',
-        status: 'clean',
-        headline: 'No phishing reports',
-        detail: 'This URL is not in the PhishTank database.'
-      };
-    }
-    return {
-      name: 'PhishTank',
-      icon: '🎣',
-      status: 'info',
-      headline: 'Unknown response',
-      detail: 'PhishTank returned an unrecognised payload.'
-    };
-  }
-</script>
+  </script>
 
 <main class="page" on:paste={handlePasteEvent}>
   <header class="top-bar">
