@@ -326,12 +326,18 @@
         flow = 'complete';
         checksOpen = true; // Auto-expand the checks section
 
-        // Wait for DOM to update, then scroll and check for threat intel
+        // Wait for DOM to update, then scroll and check for auto-expansions
         tick().then(() => {
           // Auto-expand threat intel if there are danger results
           if (intelCards && intelCards.length > 0 && intelCards.some(card => card.status === 'block')) {
             intelOpen = true;
             console.log('Auto-expanding threat intel due to block status');
+          }
+
+          // Auto-expand redirect chain if there are multiple hops (shortened URLs)
+          if (hops && hops.length > 1) {
+            redirectsOpen = true;
+            console.log('Auto-expanding redirect chain due to shortened URL');
           }
 
           scrollToResults();
@@ -374,12 +380,18 @@
       flow = 'complete';
       checksOpen = true; // Auto-expand the checks section
 
-      // Wait for DOM to update, then scroll and check for threat intel
+      // Wait for DOM to update, then scroll and check for auto-expansions
       tick().then(() => {
         // Auto-expand threat intel if there are danger results
         if (intelCards && intelCards.length > 0 && intelCards.some(card => card.status === 'block')) {
           intelOpen = true;
           console.log('Auto-expanding threat intel due to block status');
+        }
+
+        // Auto-expand redirect chain if there are multiple hops (shortened URLs)
+        if (hops && hops.length > 1) {
+          redirectsOpen = true;
+          console.log('Auto-expanding redirect chain due to shortened URL');
         }
 
         scrollToResults();
@@ -655,7 +667,7 @@
   function scrollToResults() {
     if (typeof document === 'undefined') return;
 
-    // Add a small delay to ensure the DOM has updated
+    // Add a longer delay to ensure the DOM has fully rendered
     setTimeout(() => {
       // Find the verdict card
       const verdictCard = document.querySelector('.verdict-card');
@@ -673,7 +685,7 @@
           behavior: 'smooth'
         });
       }
-    }, 100); // 100ms delay
+    }, 300); // Increased to 300ms delay
   }
 
   
@@ -862,7 +874,7 @@
     {#if learnMoreOpen}
       <div class="quishing-content">
         <h3>
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 1.5rem; height: 1.5rem; color: #60a5fa;">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 1.25rem; height: 1.25rem; color: #60a5fa;">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
           </svg>
           Quishing Explained
