@@ -40,6 +40,31 @@ export interface HeuristicResult {
       urlhausMatches: number;
       isMalicious: boolean;
     };
+    typosquatting?: {
+      isTyposquat: boolean;
+      detectedBrand: string;
+      distance: number;
+    };
+    homographs?: {
+      hasHomographs: boolean;
+      characters: Array<{fake: string, real: string}>;
+    };
+    enhancedKeywords?: {
+      hasKeywords: boolean;
+      matches: Array<{category: string, word: string}>;
+    };
+    domainAge?: {
+      age_days: number | null;
+      risk_points: number;
+      message: string;
+    };
+    enhancedThreatIntel?: {
+      threat_detected: boolean;
+      risk_points: number;
+      message: string;
+      threats: string[];
+      sources_checked: string[];
+    };
   };
   recommendations: string[];
 }
@@ -165,6 +190,81 @@ export async function analyzeHeuristics(content: QRContent, threatIntel?: any): 
       result.score += 80;
       result.recommendations.push(`⚠️ CRITICAL: URL flagged as malicious by URLHaus (${matchCount} match${matchCount > 1 ? 'es' : ''})`);
     }
+  }
+
+  // NEW: Check for typosquatting
+  result.details.typosquatting = checkTyposquatting(url);
+  if (result.details.typosquatting.isTyposquat) {
+    result.score += 40;
+    result.recommendations.push(`Looks similar to "${result.details.typosquatting.detectedBrand}" but isn't the real site`);
+  }
+
+  // NEW: Check for homograph attacks
+  result.details.homographs = checkHomographs(url);
+  if (result.details.homographs.hasHomographs) {
+    result.score += 50;
+    result.recommendations.push(`Uses look-alike characters: ${result.details.homographs.characters.map(c => c.fake).join(', ')}`);
+  }
+
+  // NEW: Enhanced keywords check
+  result.details.enhancedKeywords = checkEnhancedSuspiciousKeywords(url);
+  if (result.details.enhancedKeywords.hasKeywords) {
+    result.score += Math.min(result.details.enhancedKeywords.matches.length * 10, 40);
+    result.recommendations.push(`Contains suspicious words: ${result.details.enhancedKeywords.matches.map(m => m.word).join(', ')}`);
+  }
+
+  // NEW: Domain age check (Netlify Function)
+  try {
+    const urlObj = new URL(url);
+    const domain = urlObj.hostname;
+
+    const domainAgeCheck = await fetch('/.netlify/functions/check-domain-age', {
+      method: 'POST',
+      body: JSON.stringify({ domain }),
+      headers: { 'Content-Type': 'application/json' }
+    }).then(r => r.json());
+
+    if (domainAgeCheck.risk_points > 0) {
+      result.details.domainAge = {
+        age_days: domainAgeCheck.age_days,
+        risk_points: domainAgeCheck.risk_points,
+        message: domainAgeCheck.message
+      };
+      result.score += domainAgeCheck.risk_points;
+      result.recommendations.push(`Domain age: ${domainAgeCheck.message}`);
+    }
+  } catch (e) {
+    // Domain age check failed, continue without it
+  }
+
+  // NEW: Enhanced threat intelligence check (Netlify Function)
+  try {
+    const urlObj = new URL(url);
+    const domain = urlObj.hostname;
+
+    const threatIntelCheck = await fetch('/.netlify/functions/check-threat-intel', {
+      method: 'POST',
+      body: JSON.stringify({ domain, url }),
+      headers: { 'Content-Type': 'application/json' }
+    }).then(r => r.json());
+
+    if (threatIntelCheck.threat_detected) {
+      result.details.enhancedThreatIntel = {
+        threat_detected: threatIntelCheck.threat_detected,
+        risk_points: threatIntelCheck.risk_points,
+        message: threatIntelCheck.message,
+        threats: threatIntelCheck.threats,
+        sources_checked: threatIntelCheck.sources_checked
+      };
+      result.score += threatIntelCheck.risk_points;
+      result.recommendations.push(`Threat intelligence: ${threatIntelCheck.message}`);
+
+      if (threatIntelCheck.threats && threatIntelCheck.threats.length > 0) {
+        result.recommendations.push(`Sources: ${threatIntelCheck.threats.join(', ')}`);
+      }
+    }
+  } catch (e) {
+    // Threat intel check failed, continue without it
   }
 
   // Determine overall risk level
@@ -387,6 +487,31 @@ export function formatHeuristicResults(result: HeuristicResult): {
     details.push(`⚠️ CRITICAL: Flagged as malicious by URLHaus (${result.details.threatIntel.urlhausMatches} match${result.details.threatIntel.urlhausMatches > 1 ? 'es' : ''})`);
   }
 
+  // New security checks
+  if (result.details.typosquatting?.isTyposquat) {
+    details.push(`Looks similar to "${result.details.typosquatting.detectedBrand}" but isn't the real site`);
+  }
+
+  if (result.details.homographs?.hasHomographs) {
+    details.push(`Uses look-alike characters: ${result.details.homographs.characters.map(c => c.fake).join(', ')}`);
+  }
+
+  if (result.details.enhancedKeywords?.hasKeywords) {
+    details.push(`Suspicious words: ${result.details.enhancedKeywords.matches.map(m => m.word).join(', ')}`);
+  }
+
+  // New checks
+  if (result.details.domainAge?.risk_points > 0) {
+    details.push(`Domain age: ${result.details.domainAge.message}`);
+  }
+
+  if (result.details.enhancedThreatIntel?.threat_detected) {
+    details.push(`Threat intelligence: ${result.details.enhancedThreatIntel.message}`);
+    if (result.details.enhancedThreatIntel.threats.length > 0) {
+      details.push(`Sources: ${result.details.enhancedThreatIntel.threats.join(', ')}`);
+    }
+  }
+
   return {
     riskColor,
     riskText,
@@ -580,4 +705,135 @@ export async function analyzeUrl(url: string, options: UrlAnalysisOptions = {}):
       final_url: url
     };
   }
+}
+
+// NEW SECURITY CHECK FUNCTIONS
+
+/**
+ * Checks for typosquatting - domains that mimic popular brands
+ */
+function checkTyposquatting(url: string): {
+  isTyposquat: boolean;
+  detectedBrand: string;
+  distance: number;
+} {
+  const popularBrands = [
+    'google', 'microsoft', 'apple', 'amazon', 'paypal', 'facebook',
+    'instagram', 'twitter', 'netflix', 'spotify', 'chase', 'wellsfargo',
+    'bankofamerica', 'linkedin', 'youtube', 'tiktok', 'discord', 'telegram'
+  ];
+
+  function levenshteinDistance(a: string, b: string): number {
+    const matrix: number[][] = [];
+    for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+    for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+
+    for (let i = 1; i <= b.length; i++) {
+      for (let j = 1; j <= a.length; j++) {
+        if (b[i-1] === a[j-1]) {
+          matrix[i][j] = matrix[i-1][j-1];
+        } else {
+          matrix[i][j] = Math.min(
+            matrix[i-1][j-1] + 1,
+            matrix[i][j-1] + 1,
+            matrix[i-1][j] + 1
+          );
+        }
+      }
+    }
+    return matrix[b.length][a.length];
+  }
+
+  try {
+    const urlObj = new URL(url);
+    const domain = urlObj.hostname.toLowerCase();
+    const domainName = domain.split('.')[0]; // Get domain without TLD
+
+    for (const brand of popularBrands) {
+      const distance = levenshteinDistance(domainName, brand);
+      if (distance > 0 && distance <= 2) {
+        return {
+          isTyposquat: true,
+          detectedBrand: brand,
+          distance
+        };
+      }
+    }
+  } catch (error) {
+    console.error('Error checking typosquatting:', error);
+  }
+
+  return {
+    isTyposquat: false,
+    detectedBrand: '',
+    distance: 0
+  };
+}
+
+/**
+ * Checks for homograph attacks - look-alike characters
+ */
+function checkHomographs(url: string): {
+  hasHomographs: boolean;
+  characters: Array<{fake: string, real: string}>;
+} {
+  // Common lookalike character mappings
+  const homographs: { [key: string]: string } = {
+    'а': 'a', 'е': 'e', 'о': 'o', 'р': 'p', 'с': 'c', 'у': 'y', 'х': 'x', 'і': 'i', 'ј': 'j',
+    'А': 'A', 'Е': 'E', 'О': 'O', 'Р': 'P', 'С': 'C', 'У': 'Y', 'Х': 'X', 'І': 'I', 'Ј': 'J'
+  };
+
+  const found: Array<{fake: string, real: string}> = [];
+
+  try {
+    const urlObj = new URL(url);
+    const hostname = urlObj.hostname;
+
+    for (const [fake, real] of Object.entries(homographs)) {
+      if (hostname.includes(fake)) {
+        found.push({ fake, real });
+      }
+    }
+  } catch (error) {
+    console.error('Error checking homographs:', error);
+  }
+
+  return {
+    hasHomographs: found.length > 0,
+    characters: found
+  };
+}
+
+/**
+ * Enhanced suspicious keywords detection with categories
+ */
+function checkEnhancedSuspiciousKeywords(url: string): {
+  hasKeywords: boolean;
+  matches: Array<{category: string, word: string}>;
+} {
+  const keywordCategories: { [category: string]: string[] } = {
+    urgent: ['urgent', 'expires', 'act-now', 'immediate', 'limited-time', 'hurry'],
+    account: ['verify', 'locked', 'confirm', 'suspend', 'update', 'security', 'authenticate'],
+    reward: ['winner', 'prize', 'free', 'claim', 'reward', 'bonus', 'gift'],
+    financial: ['invoice', 'payment', 'billing', 'refund', 'transfer', 'wire', 'bank'],
+    social: ['login', 'signin', 'password', 'credential', 'account'],
+    threat: ['virus', 'malware', 'infected', 'compromised', 'hack', 'alert'],
+    download: ['download', 'install', 'update', 'setup', 'execute', 'run']
+  };
+
+  const urlLower = url.toLowerCase();
+  const matches: Array<{category: string, word: string}> = [];
+
+  for (const [category, keywords] of Object.entries(keywordCategories)) {
+    for (const word of keywords) {
+      if (urlLower.includes(word)) {
+        matches.push({ category, word });
+      }
+    }
+  }
+
+  return {
+    hasKeywords: matches.length > 0,
+    matches
+  };
 }

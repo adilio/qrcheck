@@ -154,7 +154,7 @@
   let originalInputUrl = '';
 
   const captureCanvas = document.createElement('canvas');
-  const captureCtx = captureCanvas.getContext('2d');
+  const captureCtx = captureCanvas.getContext('2d', { willReadFrequently: true });
 
   $: verdictMetaInfo = heuristicsResult ? verdictMeta[getVerdictFromHeuristics()] : null;
   $: intelCards = buildIntelCards(intelRes);
@@ -178,6 +178,9 @@
     applyTheme(theme);
     themeReady = true;
     window.addEventListener('keydown', handleGlobalKeydown);
+
+    // Initialize floating particles
+    initializeParticles();
   });
 
   onDestroy(() => {
@@ -321,6 +324,18 @@
         // Run heuristics analysis for non-URL content
         await runHeuristicsAnalysis(qrContent);
         flow = 'complete';
+        checksOpen = true; // Auto-expand the checks section
+
+        // Wait for DOM to update, then scroll and check for threat intel
+        tick().then(() => {
+          // Auto-expand threat intel if there are danger results
+          if (intelCards && intelCards.length > 0 && intelCards.some(card => card.status === 'block')) {
+            intelOpen = true;
+            console.log('Auto-expanding threat intel due to block status');
+          }
+
+          scrollToResults();
+        });
       }
     } catch (err: any) {
       flow = 'error';
@@ -357,6 +372,18 @@
       intelRes = await intel(redirectResult.final || raw);
 
       flow = 'complete';
+      checksOpen = true; // Auto-expand the checks section
+
+      // Wait for DOM to update, then scroll and check for threat intel
+      tick().then(() => {
+        // Auto-expand threat intel if there are danger results
+        if (intelCards && intelCards.length > 0 && intelCards.some(card => card.status === 'block')) {
+          intelOpen = true;
+          console.log('Auto-expanding threat intel due to block status');
+        }
+
+        scrollToResults();
+      });
     } finally {
       step = '';
     }
@@ -379,7 +406,32 @@
         throw new Error('Camera unavailable.');
       }
       videoEl.srcObject = stream;
+
+      // Add video event listeners for error handling
+      videoEl.addEventListener('error', (e) => {
+        console.error('Video error:', e);
+        stopCameraScan('error');
+        cameraError = 'Video playback failed.';
+      });
+
+      videoEl.addEventListener('ended', () => {
+        console.log('Video ended unexpectedly');
+        stopCameraScan('error');
+        cameraError = 'Video stream ended unexpectedly.';
+      });
+
       await videoEl.play();
+
+      // NEW: Scroll camera into view on mobile
+      const cameraCard = document.querySelector('.camera-card');
+      if (cameraCard) {
+        cameraCard.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center'
+        });
+      }
+
+      // Camera started successfully
       scheduleScan();
     } catch (err: any) {
       console.error('Camera failed to start:', err);
@@ -444,6 +496,9 @@
           }
         }
       }
+    } catch (err) {
+      console.error('Error in scanFrame:', err);
+      // Don't stop scanning on decode errors, just continue
     } finally {
       if (scanning) {
         scheduleScan();
@@ -550,11 +605,87 @@
     return 'copy-btn';
   }
 
+  function initializeParticles() {
+    if (typeof document === 'undefined') return;
+
+    const container = document.getElementById('particleContainer');
+    if (!container) return;
+
+    const colors = ['pink', 'magenta', 'purple', 'blue', 'cyan', 'deep-purple'];
+    const particleCount = 300;
+
+    function createParticle() {
+      const particle = document.createElement('div');
+      particle.className = `particle ${colors[Math.floor(Math.random() * colors.length)]}`;
+
+      const size = Math.random() * 4 + 2;
+      particle.style.width = `${size}px`;
+      particle.style.height = `${size}px`;
+
+      particle.style.left = `${Math.random() * 100}%`;
+      particle.style.top = `${Math.random() * -100}vh`;
+
+      const duration = Math.random() * 15 + 10;
+      particle.style.animationDuration = `${duration}s`;
+
+      particle.style.animationDelay = `${Math.random() * -20}s`;
+
+      const drift = (Math.random() - 0.5) * 100;
+      particle.style.setProperty('--drift', `${drift}px`);
+
+      container.appendChild(particle);
+
+      setTimeout(() => {
+        particle.remove();
+        createParticle();
+      }, (duration + 20) * 1000);
+    }
+
+    for (let i = 0; i < particleCount; i++) {
+      createParticle();
+    }
+
+    setInterval(() => {
+      if (container.children.length < particleCount * 2) {
+        createParticle();
+      }
+    }, 200);
+  }
+
+  function scrollToResults() {
+    if (typeof document === 'undefined') return;
+
+    // Add a small delay to ensure the DOM has updated
+    setTimeout(() => {
+      // Find the verdict card
+      const verdictCard = document.querySelector('.verdict-card');
+      if (verdictCard) {
+        console.log('Scrolling to verdict card');
+        verdictCard.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start'
+        });
+      } else {
+        console.log('Verdict card not found, trying fallback');
+        // Fallback: scroll to the bottom of the page
+        window.scrollTo({
+          top: document.body.scrollHeight,
+          behavior: 'smooth'
+        });
+      }
+    }, 100); // 100ms delay
+  }
+
   
   function handleGlobalKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
       if (learnMoreOpen) {
         learnMoreOpen = false;
+        event.stopPropagation();
+      }
+      // Check if Escape should stop scanning
+      if (scanning) {
+        stopCameraScan('idle');
         event.stopPropagation();
       }
       return;
@@ -570,7 +701,9 @@
         return;
       }
     }
-    if (scanning || flow === 'processing') return;
+    if (scanning || flow === 'processing') {
+      return;
+    }
     event.preventDefault();
     // Start camera scan when Enter is pressed
     void startCameraScan();
@@ -643,15 +776,19 @@
   </script>
 
 <main class="page" on:paste={handlePasteEvent}>
-  <header class="top-bar">
-    <div class="brand">
-      <span class="brand-title">QRCheck.ca</span>
-      <span class="brand-tagline">Privacy-first QR inspection</span>
-    </div>
-    <button class="theme-toggle" on:click={toggleTheme} type="button" title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
-      {theme === 'dark' ? '🌞' : '🌙'}
-    </button>
-  </header>
+  <!-- Floating particles background -->
+  <div class="particle-container" id="particleContainer"></div>
+
+  <div class="content">
+    <header>
+      <div class="logo">
+        <h1>QRCheck.ca</h1>
+        <p>Privacy-first QR inspection</p>
+      </div>
+      <button class="settings-btn" on:click={toggleTheme} type="button" title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+        {theme === 'dark' ? '🌙' : '☀️'}
+      </button>
+    </header>
 
   {#if alerts.length}
     <div class="alerts" aria-live="polite">
@@ -677,48 +814,62 @@
     </div>
   {/if}
 
-  <section class="intro">
-    <div class="intro-card">
-      <h1>Know before you scan</h1>
-      <p>Get a quick verdict on any QR code without leaving your browser.</p>
-      <ul class="guide">
-        <li>
-          <span class="step-icon">①</span>
-          <span>Point camera</span>
-        </li>
-        <li>
-          <span class="step-icon">②</span>
-          <span>Check verdict</span>
-        </li>
-        <li>
-          <span class="step-icon">③</span>
-          <span>Share safely</span>
-        </li>
-      </ul>
-      <div class="cta-row">
-        <button class="primary camera-btn" type="button" on:click={() => void startCameraScan()}>
-          📷 Camera
-        </button>
-        <label class="primary upload-btn">
-          📁 Upload
-          <input type="file" accept="image/*" bind:this={entryFileInput} on:change={handleEntryFile} style="display: none;" />
-        </label>
-        {#if DEV_ENABLE_MANUAL_URL}
-          <button class="secondary manual-btn" type="button" on:click={() => (manualUrlOpen = true)}>
-          Scan or upload QR
-        </button>
-        {/if}
-        {#if step && (flow === 'processing' || flow === 'scanning')}
-          <span class="status-pill">{step}</span>
+    <div class="hero-wrapper">
+      <div class="hero-glow"></div>
+      <div class="hero-card">
+        <div class="hero-icon">
+          <div class="emoji-wrapper">
+            <div class="emoji-glow"></div>
+            <span class="emoji">🎯</span>
+          </div>
+        </div>
+        <h2 class="hero-title">Don't just YOLO that QR code!</h2>
+        <p class="hero-subtitle">Know before you scan. Quick, free, private safety check.</p>
+
+        <div class="action-buttons">
+          <button class="action-btn" type="button" on:click={() => void startCameraScan()}>
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+            </svg>
+            <span>Camera</span>
+          </button>
+          <label class="action-btn">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+            </svg>
+            <span>Upload</span>
+            <input type="file" accept="image/*" bind:this={entryFileInput} on:change={handleEntryFile} style="display: none;" />
+          </label>
+        </div>
+
+        {#if originalInputUrl && flow === 'complete'}
+          <div class="last-scanned">
+            <p class="last-scanned-label">Last scanned</p>
+            <p class="last-scanned-url">{originalInputUrl}</p>
+          </div>
         {/if}
       </div>
-      {#if originalInputUrl && flow === 'complete'}
-        <p class="last-scan">
-          Last scanned: <span>{originalInputUrl}</span>
-        </p>
-      {/if}
     </div>
-  </section>
+
+    <!-- Quishing Explainer -->
+    <button class="quishing-btn" on:click={() => learnMoreOpen = !learnMoreOpen}>
+      <span class="quishing-icon">⚡</span>
+      <span>What's "Quishing"?</span>
+      <span class="quishing-arrow">{learnMoreOpen ? '▼' : '▶'}</span>
+    </button>
+
+    {#if learnMoreOpen}
+      <div class="quishing-content">
+        <h3>
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 1.5rem; height: 1.5rem; color: #60a5fa;">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+          </svg>
+          Quishing Explained
+        </h3>
+        <p>"Quishing" is QR code phishing - a cyberattack where malicious QR codes redirect you to fake websites designed to steal your personal information, passwords, or financial data. Always verify before you scan!</p>
+      </div>
+    {/if}
 
   {#if manualUrlOpen}
     <div class="modal-backdrop" role="presentation" on:click={() => (manualUrlOpen = false)} on:keydown={(e) => { if (e.key === 'Escape') manualUrlOpen = false; }} tabindex="-1"></div>
@@ -768,6 +919,18 @@
 
   {#if heuristicsResult && formattedHeuristics && verdictMetaInfo}
     <section class={`verdict-card ${verdictMetaInfo.tone}`} aria-live="polite">
+      <!-- Human-friendly verdict display -->
+      <div class="verdict {verdictMetaInfo.tone}">
+        <span class="icon">{verdictMetaInfo.emoji}</span>
+        <h2>{#if verdictMetaInfo.tone === 'safe'}Looks Safe! 👍{:else if verdictMetaInfo.tone === 'warn'}Be Careful ⚠️{:else}Don't Open This! 🚫{/if}</h2>
+        <p>
+          {#if verdictMetaInfo.tone === 'safe'}No red flags found. Always check the URL before entering info.
+          {:else if verdictMetaInfo.tone === 'warn'}We found some suspicious signs. Don't enter passwords or payment info.
+          {:else}Multiple red flags detected. This is likely malicious.
+          {/if}
+        </p>
+      </div>
+
       <header class="verdict-summary">
         <span class="verdict-emoji">{verdictMetaInfo.emoji}</span>
         <div class="verdict-headings">
@@ -980,11 +1143,22 @@
     </section>
   {/if}
 
-  <footer class="footer">
-    <span>🛡️ Privacy-first. Everything runs in your browser.</span>
-  </footer>
-
-  </main>
+    <footer>
+      <div class="footer-content">
+        <p>Your privacy matters. All scans are processed locally.</p>
+        <div class="footer-links">
+          <a href="https://github.com/adilio/qrcheck" target="_blank" rel="noopener noreferrer" class="footer-link">
+            View on GitHub
+          </a>
+          <span class="footer-separator">•</span>
+          <span class="footer-credit">
+            Made with 💜 in 🇨🇦 by <a href="https://github.com/adilio" target="_blank" rel="noopener noreferrer" class="footer-link">Adil Leghari</a>
+          </span>
+        </div>
+      </div>
+    </footer>
+  </div>
+</main>
 
 <style>
   /* Add styles for the new components */
@@ -1044,9 +1218,12 @@
   .risk-detail {
     margin-bottom: 0.5rem;
     padding: 0.5rem;
-    background-color: var(--bg-secondary);
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(8px);
     border-radius: 0.25rem;
-    list-style-type: '⚠️ ';
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    list-style-type: none;
+    color: white;
   }
   
   .no-issues {
@@ -1117,14 +1294,16 @@
   }
 
   .input-url-section, .resolution-section {
-    background-color: var(--bg-secondary);
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(8px);
     border-radius: 0.5rem;
     padding: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.2);
   }
 
   .input-url-section h4, .resolution-section h4 {
     margin: 0 0 0.75rem 0;
-    color: var(--text-primary);
+    color: white;
     font-size: 1rem;
     font-weight: 600;
   }
@@ -1134,7 +1313,7 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.75rem;
-    background-color: var(--bg-tertiary);
+    background: rgba(255, 255, 255, 0.15);
     border-radius: 0.25rem;
     border-left: 4px solid #3b82f6;
     word-break: break-all;
@@ -1143,8 +1322,9 @@
   .original-url, .final-url {
     margin-bottom: 0.5rem;
     padding: 0.75rem;
-    background-color: var(--bg-secondary);
+    background: rgba(255, 255, 255, 0.1);
     border-radius: 0.25rem;
+    border: 1px solid rgba(255, 255, 255, 0.2);
     word-break: break-all;
   }
 
@@ -1154,10 +1334,11 @@
     justify-content: space-between;
     gap: 0.5rem;
     padding: 0.75rem;
-    background-color: rgba(34, 197, 94, 0.1);
+    background: rgba(34, 197, 94, 0.2);
     border-radius: 0.25rem;
     border-left: 4px solid #22c55e;
     word-break: break-all;
+    border: 1px solid rgba(34, 197, 94, 0.3);
   }
 
   .copy-btn {
@@ -1266,7 +1447,7 @@
     display: block;
     font-weight: 600;
     margin-bottom: 0.25rem;
-    color: var(--text-secondary);
+    color: rgba(255, 255, 255, 0.8);
     font-size: 0.875rem;
   }
 
@@ -1274,6 +1455,7 @@
     font-family: monospace;
     font-size: 0.875rem;
     line-height: 1.4;
+    color: white;
   }
 
   .manual-btn {
