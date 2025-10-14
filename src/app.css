@@ -592,6 +592,12 @@ body[data-theme='light'] .action-btn {
   color: white;
 }
 
+.quishing-content h3 svg {
+  width: 1.25rem !important;
+  height: 1.25rem !important;
+  flex-shrink: 0;
+}
+
 .quishing-content p {
   color: #cbd5e1;
   line-height: 1.6;
