@@ -794,8 +794,11 @@
   <div class="content">
     <header>
       <div class="logo">
-        <h1>QRCheck.ca</h1>
-        <p>Privacy-first QR inspection</p>
+        <img src="/qrcheck.png" alt="QRCheck" class="logo-image" />
+        <div class="logo-text">
+          <h1>QRCheck.ca</h1>
+          <p>Privacy-first QR inspection</p>
+        </div>
       </div>
       <button class="settings-btn" on:click={toggleTheme} type="button" title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
         {theme === 'dark' ? '🌙' : '☀️'}
