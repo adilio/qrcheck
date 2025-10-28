@@ -112,8 +112,8 @@ export const handler: Handler = async (event) => {
       body: JSON.stringify({
         threat_detected: riskPoints > 0,
         risk_points: Math.min(riskPoints, 100),
-        message: message,
-        threats: threats.map(t => `${t.source}: ${t.details}`),
+        message,
+        threats,
         sources_checked: sourcesChecked
       })
     };

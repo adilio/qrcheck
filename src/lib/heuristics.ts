@@ -62,11 +62,43 @@ export interface HeuristicResult {
       threat_detected: boolean;
       risk_points: number;
       message: string;
-      threats: string[];
+      threats: Array<{ source: string; details: string; score: number }>;
       sources_checked: string[];
     };
   };
   recommendations: string[];
+}
+
+export type CheckStatus = 'pass' | 'warn' | 'fail' | 'info';
+
+export interface FormattedHeuristicIssue {
+  id: string;
+  label: string;
+  severity: 'warn' | 'fail';
+  detail?: string;
+}
+
+export interface FormattedHeuristicCheck {
+  id: string;
+  label: string;
+  status: CheckStatus;
+  detail?: string;
+}
+
+export interface FormattedIntelSource {
+  name: string;
+  status: 'clean' | 'warn' | 'block' | 'error';
+  headline: string;
+  detail: string;
+}
+
+export interface FormattedHeuristicSummary {
+  riskColor: string;
+  riskText: string;
+  summary: string;
+  issues: FormattedHeuristicIssue[];
+  checks: FormattedHeuristicCheck[];
+  intelSources: FormattedIntelSource[];
 }
 
 /**
@@ -88,6 +120,12 @@ export async function analyzeHeuristics(content: QRContent, threatIntel?: any): 
   }
 
   const url = content.text;
+  const recommendationSet = new Set<string>();
+  const addRecommendation = (message: string) => {
+    if (message) {
+      recommendationSet.add(message);
+    }
+  };
   
   // Check for URL shorteners
   try {
@@ -117,9 +155,7 @@ export async function analyzeHeuristics(content: QRContent, threatIntel?: any): 
       }
 
       result.score += shortenerScore;
-      result.recommendations.push(
-        `URL uses shortener service: ${result.details.shortenerCheck.domain}`
-      );
+      addRecommendation(`URL uses shortener service: ${result.details.shortenerCheck.domain}`);
     }
   } catch (error) {
     console.error('Error checking URL shortener:', error);
@@ -134,7 +170,7 @@ export async function analyzeHeuristics(content: QRContent, threatIntel?: any): 
   
   if (result.details.urlLength.isExcessive) {
     result.score += 20;
-    result.recommendations.push('URL is excessively long, which may indicate obfuscation');
+    addRecommendation('URL is excessively long, which may indicate obfuscation');
   }
 
   // Check for obfuscation patterns
@@ -142,9 +178,7 @@ export async function analyzeHeuristics(content: QRContent, threatIntel?: any): 
   
   if (result.details.obfuscation.hasObfuscation) {
     result.score += 40;
-    result.recommendations.push(
-      `URL contains obfuscation patterns: ${result.details.obfuscation.patterns.join(', ')}`
-    );
+    addRecommendation(`URL contains obfuscation patterns: ${result.details.obfuscation.patterns.join(', ')}`);
   }
 
   // Check for suspicious keywords
@@ -152,9 +186,7 @@ export async function analyzeHeuristics(content: QRContent, threatIntel?: any): 
   
   if (result.details.suspiciousKeywords.hasKeywords) {
     result.score += 40;
-    result.recommendations.push(
-      `URL contains suspicious keywords: ${result.details.suspiciousKeywords.matches.join(', ')}`
-    );
+    addRecommendation(`URL contains suspicious keywords: ${result.details.suspiciousKeywords.matches.join(', ')}`);
   }
 
   // Check domain reputation
@@ -162,17 +194,17 @@ export async function analyzeHeuristics(content: QRContent, threatIntel?: any): 
   
   if (result.details.domainReputation.isNewDomain) {
     result.score += 15;
-    result.recommendations.push('Domain appears to be newly registered');
+    addRecommendation('Domain appears to be newly registered');
   }
   
   if (result.details.domainReputation.hasSuspiciousTLD) {
     result.score += 25;
-    result.recommendations.push('Domain uses suspicious top-level domain');
+    addRecommendation('Domain uses suspicious top-level domain');
   }
   
   if (result.details.domainReputation.isIPBased) {
     result.score += 35;
-    result.recommendations.push('URL uses IP address instead of domain name');
+    addRecommendation('URL uses IP address instead of domain name');
   }
 
   // Check threat intelligence (URLHaus)
@@ -188,7 +220,7 @@ export async function analyzeHeuristics(content: QRContent, threatIntel?: any): 
     if (result.details.threatIntel.isMalicious) {
       // High risk for known malicious URLs
       result.score += 80;
-      result.recommendations.push(`⚠️ CRITICAL: URL flagged as malicious by URLHaus (${matchCount} match${matchCount > 1 ? 'es' : ''})`);
+      addRecommendation(`URL flagged as malicious by URLHaus (${matchCount} match${matchCount > 1 ? 'es' : ''})`);
     }
   }
 
@@ -196,21 +228,21 @@ export async function analyzeHeuristics(content: QRContent, threatIntel?: any): 
   result.details.typosquatting = checkTyposquatting(url);
   if (result.details.typosquatting.isTyposquat) {
     result.score += 40;
-    result.recommendations.push(`Looks similar to "${result.details.typosquatting.detectedBrand}" but isn't the real site`);
+    addRecommendation(`Looks similar to "${result.details.typosquatting.detectedBrand}" but isn't the real site`);
   }
 
   // NEW: Check for homograph attacks
   result.details.homographs = checkHomographs(url);
   if (result.details.homographs.hasHomographs) {
     result.score += 50;
-    result.recommendations.push(`Uses look-alike characters: ${result.details.homographs.characters.map(c => c.fake).join(', ')}`);
+    addRecommendation(`Uses look-alike characters: ${result.details.homographs.characters.map(c => c.fake).join(', ')}`);
   }
 
   // NEW: Enhanced keywords check
   result.details.enhancedKeywords = checkEnhancedSuspiciousKeywords(url);
   if (result.details.enhancedKeywords.hasKeywords) {
     result.score += Math.min(result.details.enhancedKeywords.matches.length * 10, 40);
-    result.recommendations.push(`Contains suspicious words: ${result.details.enhancedKeywords.matches.map(m => m.word).join(', ')}`);
+    addRecommendation(`Contains suspicious words: ${result.details.enhancedKeywords.matches.map(m => m.word).join(', ')}`);
   }
 
   // NEW: Domain age check (Netlify Function)
@@ -231,7 +263,7 @@ export async function analyzeHeuristics(content: QRContent, threatIntel?: any): 
         message: domainAgeCheck.message
       };
       result.score += domainAgeCheck.risk_points;
-      result.recommendations.push(`Domain age: ${domainAgeCheck.message}`);
+      addRecommendation(`Domain age: ${domainAgeCheck.message}`);
     }
   } catch (e) {
     // Domain age check failed, continue without it
@@ -248,35 +280,54 @@ export async function analyzeHeuristics(content: QRContent, threatIntel?: any): 
       headers: { 'Content-Type': 'application/json' }
     }).then(r => r.json());
 
-    if (threatIntelCheck.threat_detected) {
-      result.details.enhancedThreatIntel = {
-        threat_detected: threatIntelCheck.threat_detected,
-        risk_points: threatIntelCheck.risk_points,
-        message: threatIntelCheck.message,
-        threats: threatIntelCheck.threats,
-        sources_checked: threatIntelCheck.sources_checked
-      };
-      result.score += threatIntelCheck.risk_points;
-      result.recommendations.push(`Threat intelligence: ${threatIntelCheck.message}`);
+    const normalizedThreats = Array.isArray(threatIntelCheck.threats)
+      ? threatIntelCheck.threats.map((item: any) => ({
+          source: String(item.source || item?.name || 'Unknown provider'),
+          details: String(item.details || item?.message || 'Reported a potential threat'),
+          score: typeof item.score === 'number' ? item.score : 0
+        }))
+      : [];
 
-      if (threatIntelCheck.threats && threatIntelCheck.threats.length > 0) {
-        result.recommendations.push(`Sources: ${threatIntelCheck.threats.join(', ')}`);
-      }
+    const normalizedSources = Array.isArray(threatIntelCheck.sources_checked)
+      ? threatIntelCheck.sources_checked.map((source: any) => String(source))
+      : [];
+
+    result.details.enhancedThreatIntel = {
+      threat_detected: Boolean(threatIntelCheck.threat_detected),
+      risk_points: Number(threatIntelCheck.risk_points) || 0,
+      message: threatIntelCheck.message || (threatIntelCheck.threat_detected ? 'Threats detected' : 'No threats detected'),
+      threats: normalizedThreats,
+      sources_checked: normalizedSources
+    };
+
+    if (result.details.enhancedThreatIntel.threat_detected) {
+      result.score += result.details.enhancedThreatIntel.risk_points;
+      addRecommendation('Threat intelligence providers flagged this URL as malicious.');
     }
   } catch (e) {
-    // Threat intel check failed, continue without it
+    result.details.enhancedThreatIntel = {
+      threat_detected: false,
+      risk_points: 0,
+      message: 'Threat intelligence check failed',
+      threats: [],
+      sources_checked: []
+    };
+    addRecommendation('Unable to complete all threat intelligence checks. Try again later.');
   }
 
   // Determine overall risk level
   if (result.score >= 70) {
     result.risk = 'high';
-    result.recommendations.push('High risk: Exercise extreme caution with this URL');
+    addRecommendation('High risk: Exercise extreme caution with this URL');
   } else if (result.score >= 40) {
     result.risk = 'medium';
-    result.recommendations.push('Medium risk: Verify the legitimacy of this URL before proceeding');
+    addRecommendation('Medium risk: Verify the legitimacy of this URL before proceeding');
   } else {
-    result.recommendations.push('Low risk: URL appears to be safe, but always exercise caution');
+    result.risk = 'low';
+    addRecommendation('Low risk: URL appears to be safe, but always exercise caution');
   }
+
+  result.recommendations = Array.from(recommendationSet);
 
   return result;
 }
@@ -436,87 +487,386 @@ function checkDomainReputation(url: string): {
 /**
  * Formats heuristic results for display
  */
-export function formatHeuristicResults(result: HeuristicResult): {
-  riskColor: string;
-  riskText: string;
-  summary: string;
-  details: string[];
-} {
-  let riskColor = '#22c55e'; // green
+export function formatHeuristicResults(result: HeuristicResult): FormattedHeuristicSummary {
+  let riskColor = '#22c55e';
   let riskText = 'Low Risk';
-  
+
   if (result.risk === 'medium') {
-    riskColor = '#f59e0b'; // amber
+    riskColor = '#f59e0b';
     riskText = 'Medium Risk';
   } else if (result.risk === 'high') {
-    riskColor = '#ef4444'; // red
+    riskColor = '#ef4444';
     riskText = 'High Risk';
   }
-  
-  const details: string[] = [];
-  
-  if (result.details.shortenerCheck?.isShortener) {
-    details.push(`Uses URL shortener: ${result.details.shortenerCheck.domain}`);
+
+  const statusOrder: Record<CheckStatus, number> = { pass: 0, info: 1, warn: 2, fail: 3 };
+  const intelStatusOrder: Record<FormattedIntelSource['status'], number> = {
+    clean: 0,
+    warn: 1,
+    block: 2,
+    error: 3
+  };
+
+  const checks: FormattedHeuristicCheck[] = [];
+  const issueMap = new Map<string, FormattedHeuristicIssue>();
+  const intelSourcesMap = new Map<string, FormattedIntelSource>();
+
+  const addIssue = (issue: FormattedHeuristicIssue) => {
+    const existing = issueMap.get(issue.id);
+    if (!existing) {
+      issueMap.set(issue.id, issue);
+      return;
+    }
+
+    if (existing.severity === 'warn' && issue.severity === 'fail') {
+      issueMap.set(issue.id, issue);
+      return;
+    }
+
+    if (issue.detail && issue.detail !== existing.detail) {
+      const combinedDetail = existing.detail
+        ? `${existing.detail} • ${issue.detail}`
+        : issue.detail;
+      issueMap.set(issue.id, { ...existing, detail: combinedDetail });
+    }
+  };
+
+  const upsertIntelSource = (source: FormattedIntelSource) => {
+    const existing = intelSourcesMap.get(source.name);
+    if (!existing) {
+      intelSourcesMap.set(source.name, source);
+      return;
+    }
+
+    const existingWeight = intelStatusOrder[existing.status];
+    const incomingWeight = intelStatusOrder[source.status];
+
+    if (incomingWeight > existingWeight) {
+      intelSourcesMap.set(source.name, source);
+      return;
+    }
+
+    if (incomingWeight === existingWeight && source.detail && source.detail !== existing.detail) {
+      intelSourcesMap.set(source.name, {
+        ...existing,
+        detail: `${existing.detail} • ${source.detail}`
+      });
+    }
+  };
+
+  const shortenerCheck = result.details.shortenerCheck;
+  if (shortenerCheck) {
+    const isShortener = Boolean(shortenerCheck.isShortener);
+    const domain = shortenerCheck.domain || 'shortener';
+    const detail = isShortener ? `Uses ${domain}` : 'No shortener detected';
+    checks.push({
+      id: 'shortener',
+      label: 'Short URL',
+      status: isShortener ? 'warn' : 'pass',
+      detail
+    });
+
+    if (isShortener) {
+      addIssue({
+        id: 'shortener',
+        label: 'Shortened link detected',
+        severity: 'warn',
+        detail
+      });
+    }
   }
-  
+
+  let structureStatus: CheckStatus = 'pass';
+  const structureDetails: string[] = [];
+
   if (result.details.urlLength?.isExcessive) {
-    details.push(`Excessively long URL (${result.details.urlLength.value} characters)`);
+    structureStatus = 'warn';
+    structureDetails.push(`Very long (${result.details.urlLength.value} characters)`);
   }
-  
-  if (result.details.obfuscation?.hasObfuscation) {
-    details.push(`Contains obfuscation: ${result.details.obfuscation.patterns.join(', ')}`);
+
+  if (result.details.obfuscation?.hasObfuscation && result.details.obfuscation.patterns.length > 0) {
+    structureStatus = 'fail';
+    structureDetails.push(`Obfuscation: ${result.details.obfuscation.patterns.join(', ')}`);
   }
-  
+
+  const structureDetail = structureDetails.length
+    ? structureDetails.join(' • ')
+    : 'No structural issues detected';
+
+  checks.push({
+    id: 'structure',
+    label: 'URL structure',
+    status: structureStatus,
+    detail: structureDetail
+  });
+
+  if (structureStatus !== 'pass') {
+    addIssue({
+      id: 'structure',
+      label: structureStatus === 'fail' ? 'Dangerous URL structure' : 'Suspicious URL structure',
+      severity: structureStatus === 'fail' ? 'fail' : 'warn',
+      detail: structureDetail
+    });
+  }
+
+  let keywordsStatus: CheckStatus = 'pass';
+  const keywordDetails: string[] = [];
+
   if (result.details.suspiciousKeywords?.hasKeywords) {
-    details.push(`Suspicious keywords: ${result.details.suspiciousKeywords.matches.join(', ')}`);
-  }
-  
-  if (result.details.domainReputation?.isNewDomain) {
-    details.push('Newly registered domain');
-  }
-  
-  if (result.details.domainReputation?.hasSuspiciousTLD) {
-    details.push('Uses suspicious top-level domain');
-  }
-  
-  if (result.details.domainReputation?.isIPBased) {
-    details.push('Uses IP address instead of domain name');
-  }
-
-  if (result.details.threatIntel?.isMalicious) {
-    details.push(`⚠️ CRITICAL: Flagged as malicious by URLHaus (${result.details.threatIntel.urlhausMatches} match${result.details.threatIntel.urlhausMatches > 1 ? 'es' : ''})`);
-  }
-
-  // New security checks
-  if (result.details.typosquatting?.isTyposquat) {
-    details.push(`Looks similar to "${result.details.typosquatting.detectedBrand}" but isn't the real site`);
-  }
-
-  if (result.details.homographs?.hasHomographs) {
-    details.push(`Uses look-alike characters: ${result.details.homographs.characters.map(c => c.fake).join(', ')}`);
+    keywordsStatus = 'warn';
+    keywordDetails.push(`Common phishing terms: ${result.details.suspiciousKeywords.matches.join(', ')}`);
   }
 
   if (result.details.enhancedKeywords?.hasKeywords) {
-    details.push(`Suspicious words: ${result.details.enhancedKeywords.matches.map(m => m.word).join(', ')}`);
+    keywordsStatus = 'fail';
+    keywordDetails.push(
+      `High-risk terms: ${result.details.enhancedKeywords.matches.map((m) => m.word).join(', ')}`
+    );
   }
 
-  // New checks
+  const keywordsDetail = keywordDetails.length
+    ? keywordDetails.join(' • ')
+    : 'No suspicious words detected';
+
+  checks.push({
+    id: 'keywords',
+    label: 'Keywords',
+    status: keywordsStatus,
+    detail: keywordsDetail
+  });
+
+  if (keywordsStatus !== 'pass') {
+    addIssue({
+      id: 'keywords',
+      label: 'Suspicious wording detected',
+      severity: keywordsStatus === 'fail' ? 'fail' : 'warn',
+      detail: keywordsDetail
+    });
+  }
+
+  let domainStatus: CheckStatus = 'pass';
+  const domainDetails: string[] = [];
+
+  if (result.details.domainReputation?.isNewDomain) {
+    domainStatus = 'warn';
+    domainDetails.push('Recently registered domain');
+  }
+
+  if (result.details.domainReputation?.hasSuspiciousTLD) {
+    domainStatus = statusOrder[domainStatus] < statusOrder['warn'] ? 'warn' : domainStatus;
+    domainDetails.push('Suspicious top-level domain');
+  }
+
+  if (result.details.domainReputation?.isIPBased) {
+    domainStatus = 'fail';
+    domainDetails.push('Uses IP address instead of domain name');
+  }
+
   if (result.details.domainAge?.risk_points && result.details.domainAge.risk_points > 0) {
-    details.push(`Domain age: ${result.details.domainAge.message}`);
+    domainStatus = statusOrder[domainStatus] < statusOrder['warn'] ? 'warn' : domainStatus;
+    domainDetails.push(result.details.domainAge.message);
   }
 
-  if (result.details.enhancedThreatIntel?.threat_detected) {
-    details.push(`Threat intelligence: ${result.details.enhancedThreatIntel.message}`);
-    if (result.details.enhancedThreatIntel.threats.length > 0) {
-      details.push(`Sources: ${result.details.enhancedThreatIntel.threats.join(', ')}`);
+  const domainDetail = domainDetails.length
+    ? domainDetails.join(' • ')
+    : 'Domain reputation looks normal';
+
+  checks.push({
+    id: 'domain',
+    label: 'Domain reputation',
+    status: domainStatus,
+    detail: domainDetail
+  });
+
+  if (domainStatus !== 'pass') {
+    addIssue({
+      id: 'domain',
+      label: domainStatus === 'fail' ? 'Dangerous domain profile' : 'Suspicious domain profile',
+      severity: domainStatus === 'fail' ? 'fail' : 'warn',
+      detail: domainDetail
+    });
+  }
+
+  const typosquat = result.details.typosquatting;
+  if (typosquat) {
+    const typoStatus: CheckStatus = typosquat.isTyposquat ? 'fail' : 'pass';
+    const typoDetail = typosquat.isTyposquat
+      ? `Impersonates ${typosquat.detectedBrand}`
+      : 'No brand impersonation detected';
+
+    checks.push({
+      id: 'typosquat',
+      label: 'Brand look-alike',
+      status: typoStatus,
+      detail: typoDetail
+    });
+
+    if (typoStatus === 'fail') {
+      addIssue({
+        id: 'typosquat',
+        label: 'Potential brand impersonation',
+        severity: 'fail',
+        detail: typoDetail
+      });
     }
   }
+
+  const homographs = result.details.homographs;
+  if (homographs) {
+    const homographStatus: CheckStatus = homographs.hasHomographs ? 'fail' : 'pass';
+    const charList = Array.isArray(homographs.characters)
+      ? homographs.characters.map((c) => c.fake).filter(Boolean).join(', ')
+      : '';
+    const homographDetail = homographs.hasHomographs && charList
+      ? `Look-alike characters detected: ${charList}`
+      : 'No Unicode look-alike characters detected';
+
+    checks.push({
+      id: 'homograph',
+      label: 'Look-alike characters',
+      status: homographStatus,
+      detail: homographDetail
+    });
+
+    if (homographStatus === 'fail') {
+      addIssue({
+        id: 'homograph',
+        label: 'Homograph attack detected',
+        severity: 'fail',
+        detail: homographDetail
+      });
+    }
+  }
+
+  let threatStatus: CheckStatus = 'pass';
+  const threatDetails: string[] = [];
+
+  const urlhaus = result.details.threatIntel;
+  if (urlhaus) {
+    if (urlhaus.isMalicious) {
+      threatStatus = 'fail';
+      const matchDetail = `URLHaus reported ${urlhaus.urlhausMatches} match${urlhaus.urlhausMatches === 1 ? '' : 'es'}`;
+      threatDetails.push(matchDetail);
+      upsertIntelSource({
+        name: 'URLHaus',
+        status: 'block',
+        headline: `Reported malicious (${urlhaus.urlhausMatches} match${urlhaus.urlhausMatches === 1 ? '' : 'es'})`,
+        detail: 'This URL is flagged as malicious by URLHaus.'
+      });
+    } else {
+      upsertIntelSource({
+        name: 'URLHaus',
+        status: 'clean',
+        headline: 'No listings found',
+        detail: 'This URL is not currently flagged by URLHaus.'
+      });
+    }
+  }
+
+  const enhancedIntel = result.details.enhancedThreatIntel;
+  if (enhancedIntel) {
+    const threatMap = new Map<string, { source: string; details: string; score: number }>();
+    enhancedIntel.threats.forEach((threat) => {
+      if (threat && threat.source) {
+        threatMap.set(threat.source, threat);
+      }
+    });
+
+    if (enhancedIntel.sources_checked.length > 0) {
+      enhancedIntel.sources_checked.forEach((sourceName) => {
+        const threat = threatMap.get(sourceName);
+        if (threat) {
+          threatStatus = 'fail';
+          const detail = `${sourceName} reported: ${threat.details}`;
+          threatDetails.push(detail);
+          upsertIntelSource({
+            name: sourceName,
+            status: 'block',
+            headline: 'Reported malicious',
+            detail: threat.details
+          });
+        } else {
+          upsertIntelSource({
+            name: sourceName,
+            status: 'clean',
+            headline: 'No issues found',
+            detail: 'No threats reported by this provider.'
+          });
+        }
+      });
+    } else if (enhancedIntel.threats.length > 0) {
+      enhancedIntel.threats.forEach((threat) => {
+        threatStatus = 'fail';
+        const detail = `${threat.source} reported: ${threat.details}`;
+        threatDetails.push(detail);
+        upsertIntelSource({
+          name: threat.source,
+          status: 'block',
+          headline: 'Reported malicious',
+          detail: threat.details
+        });
+      });
+    } else if (enhancedIntel.message === 'Threat intelligence check failed') {
+      threatStatus = statusOrder[threatStatus] < statusOrder['warn'] ? 'warn' : threatStatus;
+      threatDetails.push('Threat intelligence checks could not be completed');
+      upsertIntelSource({
+        name: 'Threat intelligence',
+        status: 'error',
+        headline: 'Lookup failed',
+        detail: 'Unable to reach threat intelligence services.'
+      });
+    }
+
+    if (enhancedIntel.threat_detected && enhancedIntel.message) {
+      threatDetails.push(enhancedIntel.message);
+    }
+  }
+
+  if (threatDetails.length === 0) {
+    threatDetails.push('No third-party providers reported threats.');
+  }
+
+  const threatDetail = threatDetails.join(' • ');
+
+  checks.push({
+    id: 'threat-intel',
+    label: 'Threat intelligence',
+    status: threatStatus,
+    detail: threatDetail
+  });
+
+  if (threatStatus === 'fail') {
+    addIssue({
+      id: 'threat-intel',
+      label: 'Threat intelligence providers flagged this URL',
+      severity: 'fail',
+      detail: threatDetail
+    });
+  } else if (threatStatus === 'warn') {
+    addIssue({
+      id: 'threat-intel',
+      label: 'Threat intelligence incomplete',
+      severity: 'warn',
+      detail: threatDetail
+    });
+  }
+
+  const severityOrder: Record<FormattedHeuristicIssue['severity'], number> = { warn: 1, fail: 2 };
+  const issues = Array.from(issueMap.values()).sort(
+    (a, b) => severityOrder[b.severity] - severityOrder[a.severity]
+  );
+
+  const intelSources = Array.from(intelSourcesMap.values()).sort(
+    (a, b) => intelStatusOrder[b.status] - intelStatusOrder[a.status]
+  );
 
   return {
     riskColor,
     riskText,
-    summary: `Risk Score: ${result.score}/100`,
-    details
+    summary: `Risk score: ${result.score}/100`,
+    issues,
+    checks,
+    intelSources
   };
 }
 

@@ -2,7 +2,14 @@
   import { onDestroy, onMount, tick } from 'svelte';
   import { DEV_ENABLE_MANUAL_URL } from './lib/flags';
   import { decodeQRFromFile, decodeQRFromImageData, parseQRContent, type QRContent } from './lib/decode';
-  import { analyzeHeuristics, formatHeuristicResults } from './lib/heuristics';
+  import {
+    analyzeHeuristics,
+    formatHeuristicResults,
+    type CheckStatus,
+    type FormattedHeuristicSummary,
+    type FormattedIntelSource,
+    type FormattedHeuristicCheck
+  } from './lib/heuristics';
   import { resolveChain, intel, type IntelResponse } from './lib/api';
     import { startCamera, stopCamera } from './lib/camera';
 
@@ -131,10 +138,11 @@
   let manualUrl = '';
   let qrContent: QRContent | null = null;
   let heuristicsResult: any = null;
-  let formattedHeuristics: any = null;
+  let formattedHeuristics: FormattedHeuristicSummary | null = null;
   let hops: string[] = [];
   let redirectExpansionBlocked = false;
   let intelRes: IntelResponse | null = null;
+  let flaggedChecks: FormattedHeuristicCheck[] = [];
   let error = '';
   let cameraError = '';
   let clipboardError = '';
@@ -159,9 +167,14 @@
   const captureCtx = captureCanvas.getContext('2d', { willReadFrequently: true });
 
   $: verdictMetaInfo = heuristicsResult ? verdictMeta[getVerdictFromHeuristics()] : null;
-  $: intelCards = buildIntelCards(intelRes);
+  $: intelCards = buildIntelCards(intelRes, formattedHeuristics?.intelSources || []);
   $: busy = flow === 'processing';
   $: alerts = buildAlerts();
+  $: terminalUrl = hops.length ? hops[hops.length - 1] : '';
+  $: redirectCount = Math.max(hops.length - 1, 0);
+  $: flaggedChecks = formattedHeuristics
+    ? formattedHeuristics.checks.filter((check) => check.status !== 'pass')
+    : [];
 
   $: if (themeReady) {
     applyTheme(theme);
@@ -331,7 +344,7 @@
         // Wait for DOM to update, then scroll and check for auto-expansions
         tick().then(() => {
           // Auto-expand threat intel if there are danger results
-          if (intelCards && intelCards.length > 0 && intelCards.some(card => card.status === 'block')) {
+          if (intelCards && intelCards.length > 0 && hasActionableIntel(intelCards)) {
             intelOpen = true;
             console.log('Auto-expanding threat intel due to block status');
           }
@@ -385,7 +398,7 @@
       // Wait for DOM to update, then scroll and check for auto-expansions
       tick().then(() => {
         // Auto-expand threat intel if there are danger results
-        if (intelCards && intelCards.length > 0 && intelCards.some(card => card.status === 'block')) {
+        if (intelCards && intelCards.length > 0 && hasActionableIntel(intelCards)) {
           intelOpen = true;
           console.log('Auto-expanding threat intel due to block status');
         }
@@ -640,6 +653,23 @@
     return 'copy-btn';
   }
 
+  function hasActionableIntel(cards: IntelCard[]): boolean {
+    return cards.some((card) => card.status === 'block' || card.status === 'warn' || card.status === 'error');
+  }
+
+  function statusIcon(status: CheckStatus): string {
+    switch (status) {
+      case 'fail':
+        return '⛔️';
+      case 'warn':
+        return '⚠️';
+      case 'info':
+        return 'ℹ️';
+      default:
+        return '✅';
+    }
+  }
+
   function initializeParticles() {
     if (typeof document === 'undefined') return;
 
@@ -744,19 +774,66 @@
     void startCameraScan();
   }
 
-  function buildIntelCards(data: IntelResponse | null): IntelCard[] {
-    if (!data) return [];
-    const cards: IntelCard[] = [];
-    const urlHausCard = buildURLHausCard(data.urlhaus);
-    if (urlHausCard) cards.push(urlHausCard);
-    return cards;
+  const intelStatusWeight: Record<IntelStatus, number> = {
+    clean: 0,
+    info: 1,
+    warn: 2,
+    block: 3,
+    error: 4
+  };
+
+  const intelIcons: Record<string, string> = {
+    'Google Safe Browsing': '🛡️',
+    URLVoid: '🕵️',
+    URLHaus: '🌐',
+    'Threat intelligence': '🛰️'
+  };
+
+  const intelStatusMap: Record<FormattedIntelSource['status'], IntelStatus> = {
+    clean: 'clean',
+    warn: 'warn',
+    block: 'block',
+    error: 'error'
+  };
+
+  function convertSourceToCard(source: FormattedIntelSource): IntelCard {
+    return {
+      name: source.name,
+      icon: intelIcons[source.name] || '🌐',
+      status: intelStatusMap[source.status],
+      headline: source.headline,
+      detail: source.detail
+    };
+  }
+
+  function buildIntelCards(data: IntelResponse | null, enhancedSources: FormattedIntelSource[]): IntelCard[] {
+    const cardsByName = new Map<string, IntelCard>();
+
+    enhancedSources.forEach((source) => {
+      cardsByName.set(source.name, convertSourceToCard(source));
+    });
+
+    if (data) {
+      const urlHausCard = buildURLHausCard(data.urlhaus);
+      if (urlHausCard) {
+        const existing = cardsByName.get(urlHausCard.name);
+        if (!existing || intelStatusWeight[urlHausCard.status] > intelStatusWeight[existing.status]) {
+          cardsByName.set(urlHausCard.name, urlHausCard);
+        }
+      }
+    }
+
+    return Array.from(cardsByName.values()).sort(
+      (a, b) => intelStatusWeight[b.status] - intelStatusWeight[a.status]
+    );
   }
 
   function buildURLHausCard(data: any): IntelCard | null {
+    const icon = intelIcons.URLHaus || '🌐';
     if (data === null) {
       return {
         name: 'URLHaus',
-        icon: '🌐',
+        icon,
         status: 'error',
         headline: 'Lookup failed',
         detail: 'Unable to check URLHaus database.'
@@ -765,7 +842,7 @@
     if (!data || !data.ok) {
       return {
         name: 'URLHaus',
-        icon: '🌐',
+        icon,
         status: 'error',
         headline: 'Lookup failed',
         detail: 'No response from URLHaus.'
@@ -775,7 +852,7 @@
     if (status === 'no_results') {
       return {
         name: 'URLHaus',
-        icon: '🌐',
+        icon,
         status: 'clean',
         headline: 'No listings found',
         detail: 'This URL is not currently flagged by URLHaus.'
@@ -784,7 +861,7 @@
     if (status === 'error' || status === 'failed') {
       return {
         name: 'URLHaus',
-        icon: '🌐',
+        icon,
         status: 'error',
         headline: 'Feed error',
         detail: 'URLHaus returned an error. Try again later.'
@@ -793,7 +870,7 @@
     if (data.matches && data.matches.length > 0) {
       return {
         name: 'URLHaus',
-        icon: '🌐',
+        icon,
         status: 'block',
         headline: `Reported malicious (${data.matches.length} match${data.matches.length > 1 ? 'es' : ''})`,
         detail: 'This URL is flagged as malicious by URLHaus.'
@@ -801,7 +878,7 @@
     }
     return {
       name: 'URLHaus',
-      icon: '🌐',
+      icon,
       status: 'clean',
       headline: 'No listings found',
       detail: 'This URL is not currently flagged by URLHaus.'
@@ -981,6 +1058,16 @@
         </div>
       </header>
 
+      {#if flaggedChecks.length}
+        <div class="check-flags">
+          {#each flaggedChecks as check (check.id)}
+            <span class={`check-chip ${check.status}`}>
+              {statusIcon(check.status)} {check.label}
+            </span>
+          {/each}
+        </div>
+      {/if}
+
       {#if qrContent?.type === 'url'}
         <div class="url-display">
           <div class="input-url-section">
@@ -995,38 +1082,25 @@
           </div>
 
           <div class="resolution-section">
-            <h4>Resolution Results</h4>
-            {#if hops.length > 1}
+            <h4>Resolution</h4>
+            {#if terminalUrl}
               <div class="resolved-url">
-                <span class="url-label">🎯 Resolved URL (Terminal Endpoint):</span>
-                <span class="url-value">{hops[hops.length - 1]}</span>
-                <button class="{getCopyButtonClass()}" type="button" on:click={() => copyToClipboard(hops[hops.length - 1])} title="Copy resolved URL">
+                <span class="url-label">🎯 Final URL:</span>
+                <span class="url-value">{terminalUrl}</span>
+                <button class="{getCopyButtonClass()}" type="button" on:click={() => copyToClipboard(terminalUrl)} title="Copy final URL">
                   {copyFeedback || '📋 Copy'}
                 </button>
               </div>
-              <div class="redirect-summary">
-                <span class="redirect-count">
-                  {hops.length - 1} redirect{hops.length - 1 > 1 ? 's' : ''}
-                </span>
-                <span class="redirect-info">
-                  Shortened link expanded to show true destination
-                </span>
-              </div>
-            {:else if hops.length === 1}
-              <div class="resolved-url">
-                <span class="url-label">🎯 Resolved URL (Terminal Endpoint):</span>
-                <span class="url-value">{hops[0]}</span>
-                <button class="{getCopyButtonClass()}" type="button" on:click={() => copyToClipboard(hops[0])} title="Copy resolved URL">
-                  {copyFeedback || '📋 Copy'}
-                </button>
-              </div>
-              <div class="redirect-summary single">
+              <div class={`redirect-summary ${!redirectExpansionBlocked && redirectCount === 0 ? 'single' : ''}`}>
                 {#if redirectExpansionBlocked}
                   <span class="redirect-count">⚠️ Redirects blocked</span>
-                  <span class="redirect-info">Browser security prevents expansion of this shortened link</span>
+                  <span class="redirect-info">Browser security prevented expanding this shortened link</span>
+                {:else if redirectCount > 0}
+                  <span class="redirect-count">{redirectCount} redirect{redirectCount > 1 ? 's' : ''}</span>
+                  <span class="redirect-info">Shortened link expanded to reveal the destination</span>
                 {:else}
-                  <span class="redirect-count">No redirects</span>
-                  <span class="redirect-info">Direct link - no expansion needed</span>
+                  <span class="redirect-count">Direct link</span>
+                  <span class="redirect-info">No redirects detected</span>
                 {/if}
               </div>
             {/if}
@@ -1048,15 +1122,34 @@
           </div>
           <div class="risk-score">{formattedHeuristics.summary}</div>
         </div>
-        
-        {#if formattedHeuristics.details.length}
-          <ul class="risk-details">
-            {#each formattedHeuristics.details as detail}
-              <li class="risk-detail">{detail}</li>
+
+        {#if formattedHeuristics.issues.length}
+          <ul class="risk-issues">
+            {#each formattedHeuristics.issues as issue (issue.id)}
+              <li class={`risk-issue ${issue.severity}`}>
+                <span class="issue-label">{issue.label}</span>
+                {#if issue.detail}
+                  <span class="issue-detail">{issue.detail}</span>
+                {/if}
+              </li>
             {/each}
           </ul>
         {:else}
-          <p class="no-issues">No specific issues detected.</p>
+          <p class="no-issues">No issues detected in the latest scan.</p>
+        {/if}
+
+        {#if formattedHeuristics.checks.length}
+          <h4 class="checks-title">Checks completed</h4>
+          <div class="checks-grid">
+            {#each formattedHeuristics.checks as check (check.id)}
+              <div class={`check-row ${check.status}`}>
+                <span class="check-label">{statusIcon(check.status)} {check.label}</span>
+                {#if check.detail}
+                  <span class="check-detail">{check.detail}</span>
+                {/if}
+              </div>
+            {/each}
+          </div>
         {/if}
         
         {#if heuristicsResult.recommendations.length}
@@ -1249,19 +1342,43 @@
     color: var(--text-secondary);
   }
   
-  .risk-details {
-    margin-bottom: 1rem;
+  .risk-issues {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 1rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
   }
-  
-  .risk-detail {
-    margin-bottom: 0.5rem;
-    padding: 0.5rem;
-    background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(8px);
+
+  .risk-issue {
+    padding: 0.75rem;
     border-radius: 0.25rem;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    list-style-type: none;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .risk-issue.fail {
+    border-color: rgba(239, 68, 68, 0.4);
+    background: rgba(239, 68, 68, 0.15);
+  }
+
+  .risk-issue.warn {
+    border-color: rgba(245, 158, 11, 0.4);
+    background: rgba(245, 158, 11, 0.15);
+  }
+
+  .issue-label {
+    font-weight: 600;
     color: white;
+  }
+
+  .issue-detail {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
   }
   
   .no-issues {
@@ -1308,6 +1425,94 @@
   .learn-copy {
     color: var(--text-secondary);
     font-size: 0.875rem;
+  }
+
+  .check-flags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .check-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    border-radius: 999px;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.75rem;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .check-chip.fail {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.4);
+  }
+
+  .check-chip.warn {
+    background: rgba(245, 158, 11, 0.2);
+    border-color: rgba(245, 158, 11, 0.4);
+  }
+
+  .check-chip.info {
+    background: rgba(59, 130, 246, 0.15);
+    border-color: rgba(59, 130, 246, 0.35);
+  }
+
+  .checks-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin: 1rem 0 0.5rem;
+    color: var(--text-primary);
+  }
+
+  .checks-grid {
+    display: grid;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .check-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.25rem;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .check-row.fail {
+    border-color: rgba(239, 68, 68, 0.4);
+    background: rgba(239, 68, 68, 0.12);
+  }
+
+  .check-row.warn {
+    border-color: rgba(245, 158, 11, 0.4);
+    background: rgba(245, 158, 11, 0.12);
+  }
+
+  .check-row.info {
+    border-color: rgba(148, 163, 184, 0.4);
+  }
+
+  .check-label {
+    font-weight: 600;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .check-detail {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    flex: 1;
+    text-align: right;
   }
 
   .camera-btn, .upload-btn {
