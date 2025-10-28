@@ -12,3 +12,7 @@ dist
 
 # Agent documentation
 AGENTS.md
+
+# Project documentation (internal use only - not to be committed)
+docs/PROJECT_STATUS.md
+docs/IMPLEMENTATION_PLAN.md

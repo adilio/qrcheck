@@ -501,7 +501,7 @@ export function formatHeuristicResults(result: HeuristicResult): {
   }
 
   // New checks
-  if (result.details.domainAge?.risk_points > 0) {
+  if (result.details.domainAge?.risk_points && result.details.domainAge.risk_points > 0) {
     details.push(`Domain age: ${result.details.domainAge.message}`);
   }
 
