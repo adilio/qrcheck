@@ -15,9 +15,7 @@ body {
   background: linear-gradient(180deg, #0a0520, #1a0a3e, #0a0520);
   color: white;
   transition: background 0.5s ease, color 0.5s ease;
-}
 
-body {
   /* Friendly colors */
   --color-safe: #10B981;
   --color-warning: #F59E0B;
