@@ -1,177 +1,121 @@
-# QRCheck 🛡️
+# <img src="public/qrcheck.png" alt="qrcheck-logo" style="width:25px;"/> QRCheck.ca
 
-A privacy-focused tool for checking QR codes and URLs before you visit them.
+**A privacy-focused tool to check QR codes and URLs before you visit them.**
 
-QRCheck helps you stay safe online by analyzing QR codes and checking URLs for potential threats like malware, phishing, and other security risks. Everything happens locally in your browser, and no data is sent to external servers.
+Ever wondered where that QR code at the coffee shop is really taking you? Or if that shortened link in your email is actually safe? QRCheck helps you find out—without compromising your privacy.
 
-## Why I Built This
+## Why QRCheck?
 
-I created QRCheck because I wanted a simple, privacy-first way to check QR codes and links before clicking on them. Whether you're scanning a QR code from a restaurant menu, checking a link in an email, or just being careful online, this tool provides some extra peace of mind.
+QR codes are everywhere: restaurant menus, parking meters, event flyers, even on billboards. They're convenient, but they're also a security risk. You can't see where they lead until it's too late.
 
-## Features
-
-- **Privacy First**: All analysis happens in your browser
-- **URL Shortener Detection**: Identifies shortened links that hide the true destination
-- **Heuristic Analysis**: Detects suspicious patterns in URLs
-- **Threat Intelligence**: Optional integration with security databases
-- **Camera Support**: Scan QR codes directly from your device
-- **Open Source**: Everything is transparent and auditable
+I built QRCheck because I wanted a simple way to check links and QR codes before clicking on them. No sign-ups, no tracking, no sending your data to random servers. Just point, scan, and get an honest answer about what you're dealing with.
 
 ## What It Does
 
-**QR Code Support**
-- Decode any QR code locally
-- Recognize different content types (URLs, text, emails, phone numbers, WiFi, contact cards, locations)
-- Scan via camera or upload an image
+QRCheck gives you X-ray vision for QR codes and URLs. Here's what happens when you scan:
 
-**URL Analysis**
-- Detect URL shorteners (200+ services)
-- Find suspicious patterns and red flags
-- Follow redirects to see where links actually go
-- Check against threat databases (optional)
+### 🔍 Decodes QR Codes
+- Scan with your camera or upload an image
+- Works with all content types: URLs, text, emails, phone numbers, WiFi credentials, contact cards, and locations
+- Everything happens locally in your browser
 
-**Risk Assessment**
-- 0-100 risk scoring system
-- Clear categories: Low, Medium, High Risk
-- Detailed explanations of detected issues
+### 🧪 Analyzes URLs
+- Detects 200+ URL shortening services that hide the real destination
+- Follows redirect chains to reveal where you'll actually end up
+- Spots suspicious patterns, sketchy domains, and common attack techniques
+- Checks against threat intelligence databases (optional)
 
-## How It Works
+### 📊 Gives You a Risk Score
+- **Low Risk (0-39)**: Looks clean, no red flags
+- **Medium Risk (40-69)**: Some concerns, proceed with caution
+- **High Risk (70+)**: Multiple warning signs, avoid this URL
 
-1. **Decode** - Extract the raw data from QR codes
-2. **Analyze** - Run heuristic analysis to detect suspicious patterns
-3. **Verify** - Optionally check against threat intelligence feeds
-4. **Report** - Get a clear risk assessment with detailed findings
+You get a clear breakdown of what was found and why it matters.
 
-All processing happens locally in your browser, so your data stays private.
+## Security Checks
 
-## URL Shortener Detection
+Here's exactly what QRCheck looks for when analyzing a URL:
 
-QRCheck includes a database of URL shortening services. This matters because:
+### URL Structure
+- ✅ **URL Length** — Flags URLs over 2,000 characters (often used to hide malicious code)
+- ✅ **Obfuscation Detection** — Spots excessive encoding, base64, or hex that could hide the true destination
+- ✅ **Dangerous Protocols** — Warns about `javascript:`, `data:`, `file:`, or `ftp:` schemes
+- ✅ **HTTPS Check** — Flags URLs that don't use secure HTTPS connections
+- ✅ **Executable Files** — Detects links to `.exe`, `.msi`, `.apk`, `.dmg`, and other potentially dangerous files
+- ✅ **Suspicious Archives** — Flags `.zip`, `.rar`, `.7z` files, especially when combined with urgent keywords
 
-- Shortened URLs obscure the true destination
-- They can bypass security filters
-- Attackers often use them to hide malicious sites
+### Domain Analysis
+- ✅ **IP-Based URLs** — Detects raw IP addresses instead of proper domain names (common in phishing)
+- ✅ **Risky TLDs** — Flags domains using high-abuse extensions like `.tk`, `.ml`, `.ga`, `.cf`
+- ✅ **Punycode/IDN** — Identifies internationalized domain names that could be used for spoofing
+- ✅ **Domain Age** — Checks if the domain was just registered (newer domains = higher risk)
+- ✅ **Typosquatting** — Detects domains that look like popular brands (e.g., "g00gle.com" instead of "google.com")
+- ✅ **Homograph Attacks** — Spots look-alike characters from different alphabets (e.g., "а" vs "a")
 
-The tool checks against 200+ known shortening services including popular ones (bit.ly, tinyurl.com, t.co), niche services, and commonly abused domains.
+### Content Analysis
+- ✅ **Suspicious Keywords** — Looks for alarming words in five categories:
+  - **Account terms**: login, signin, verify, password, secure, suspended, locked
+  - **Urgent language**: urgent, immediate, action-required, expires, limited-time
+  - **Financial terms**: paypal, bank, invoice, payment, transfer, account
+  - **Download prompts**: download, install, execute, run, update
+  - **Threat language**: virus, malware, infected, compromised, alert, warning
 
-## Risk Assessment
+### URL Shorteners
+- ✅ **Known Shorteners** — Identifies 200+ services including bit.ly, tinyurl.com, t.co, cutt.ly, and many more
+- ✅ **Risk-Based Scoring** — Assigns different risk levels based on service reputation:
+  - Reputable services (bit.ly, t.co): Medium concern
+  - Lesser-known services: Higher concern
+  - Commonly abused services: High concern
 
-QRCheck provides a 0-100 risk score with three levels:
+### Redirect Chain Analysis
+- ✅ **Redirect Following** — Traces the full path from shortened URL to final destination
+- ✅ **Hop Counting** — Flags excessive redirects (each hop adds to the risk score)
+- ✅ **Chain Transparency** — Shows you every stop along the way
 
-- **Low Risk (0-39)**: No obvious red flags detected
-- **Medium Risk (40-69)**: Some suspicious patterns detected
-- **High Risk (70+)**: Multiple risk factors or highly suspicious patterns
+### Threat Intelligence (Optional)
+When enabled, QRCheck can check URLs against external security databases:
 
-## Security Checks Performed
+- ✅ **Google Safe Browsing** — Detects malware, phishing, social engineering, and unwanted software
+- ✅ **AbuseIPDB** — Identifies known malicious IP addresses and hostile infrastructure
+- ✅ **URLHaus** — Catches known malware distribution URLs (updated daily)
+- ✅ **Pattern Analysis** — Built-in fallback using local pattern matching
 
-QRCheck performs multiple security checks on URLs. Here's exactly what gets analyzed:
+*Note: Threat intelligence is optional and requires API keys. The tool works great without it.*
 
-### Local Browser Checks
+## Privacy First
 
-**URL Structure Analysis**
-- **URL Length**: Flags URLs over 2000 characters (+20 points)
-- **URL Obfuscation**: Detects excessive encoding, base64, hex encoding (+40 points)
-- **Dangerous Schemes**: Checks for data:, file:, ftp:, javascript: protocols (+50 points)
-- **HTTPS Usage**: Ensures secure connection (+15 points if missing)
+Your privacy matters. Here's what QRCheck does differently:
 
-**Domain Analysis**
-- **IP-based URLs**: Detects URLs using IP addresses instead of domains (+35 points)
-- **Suspicious TLDs**: Flags risky top-level domains (.tk, .ml, .ga, .cf, etc.) (+25 points)
-- **Punycode/IDN**: Detects internationalized domain names (+10 points)
-- **New Domains**: Identifies newly registered domains (+15 points)
-- **Domain Age**: Checks domain registration age via external API (+15-30 points)
+- **Local Processing** — QR decoding and most analysis happens entirely in your browser
+- **No Tracking** — We don't use analytics, cookies, or any tracking
+- **No Storage** — URLs you check aren't saved anywhere
+- **No Data Sharing** — Nothing is sent to third parties
+- **Open Source** — All code is public and auditable
+- **Secure API Calls** — When threat intelligence is enabled, lookups go through secure Netlify Functions
 
-**Content Analysis**
-- **Suspicious Keywords**: Detects alarming words in categories:
-  - Account terms: login, signin, verify, password, secure, etc.
-  - Urgent terms: urgent, immediate, action-required, expires
-  - Financial terms: paypal, bank, invoice, payment, transfer
-  - Download terms: download, install, execute, run, update
-  - Threat terms: virus, malware, infected, compromised, alert
-
-**Attack Detection**
-- **Typosquatting**: Detects domains mimicking popular brands (google, paypal, etc.) using Levenshtein distance (+40 points)
-- **Homograph Attacks**: Detects look-alike characters from different alphabets (+50 points)
-- **Enhanced Keywords**: Categorized suspicious word detection (+10-40 points)
-
-**URL Shortener Detection**
-- **Known Shorteners**: Identifies 200+ URL shortening services (+15-45 points)
-- **Risk-based Scoring**:
-  - Reputable services (bit.ly, t.co): +30 points
-  - Medium risk services (cutt.ly, is.gd): +25 points
-  - Unknown/obscure services: +45 points
-
-**File Download Checks**
-- **Executable Files**: Flags .exe, .msi, .scr, .bat, .cmd, .ps1, .apk, .dmg, .pkg (+20 points)
-- **Archive Files**: Flags .zip, .rar, .7z with additional keyword analysis (+20-40 points)
-
-**Redirect Analysis**
-- **Redirect Chain**: Follows redirects to reveal final destination
-- **Multiple Hops**: Flags excessive redirects (+5 points per hop, max +20)
-- **Chain Transparency**: Shows full redirect path
-
-### External Threat Intelligence (Optional)
-
-**Google Safe Browsing API** (Requires API key)
-- **Threat Types**: Malware, phishing, social engineering, unwanted software
-- **Scoring**: +40 points per threat detected
-- **Response Time**: ~200-500ms
-
-**AbuseIPDB** (Optional IP reputation)
-- **Method**: REST API query for known abusive hosts
-- **Detection**: Malicious infrastructure, high-abuse IP addresses
-- **Scoring**: +25 to +60 based on confidence and report volume
-- **Response Time**: ~200-500ms (only triggered for direct IP destinations)
-
-**URLHaus** (Built-in)
-- **Specialization**: Malware distribution URLs
-- **Method**: Local database updated nightly
-- **Scoring**: +80 points for known malicious URLs
-- **Update Frequency**: Daily via GitHub Action
-
-**Pattern Analysis** (Built-in fallback)
-- **Method**: Local regex pattern matching
-- **Detection**: Suspicious TLDs, keywords, IP addresses
-- **Scoring**: +20 points per pattern match
-- **Response Time**: Instant
-
-### Scoring System
-
-Each check adds points to the risk score:
-
-- **High Risk** (≥80 points): Immediate warning, multiple serious issues
-- **Medium Risk** (40-79 points): Caution advised, some concerns detected
-- **Low Risk** (1-39 points): Minor concerns, generally safe
-- **No Risk** (0 points): Clean, no issues detected
-
-### Privacy Notes
-
-- All local analysis happens in your browser
-- External API calls (when enabled) go through secure Netlify Functions
-- No URLs or results are stored or tracked
-- Domain age and threat intelligence lookups are anonymous
+**Data flow**: QR Code → Your Browser (decoding) → Your Browser (analysis) → Netlify Functions (optional threat checks) → Your Browser (results). That's it. Nothing is logged or stored.
 
 ## Getting Started
 
 ### Prerequisites
-
 - Node.js 18+
 - npm
 
 ### Quick Start
 
 ```bash
+# Clone the repository
+git clone https://github.com/adilio/qrcheck.git
+cd qrcheck
+
 # Install dependencies
 npm install
 
-# Start development server with full features
+# Start with full features (recommended)
 npm run dev:netlify
-
-# Or start basic development server
-npm run dev
 ```
 
-The application will be available at `http://localhost:8888`.
+Visit `http://localhost:8888` and you're ready to go!
 
 ### Development Commands
 
@@ -185,172 +129,111 @@ npm run e2e
 # Build for production
 npm run build
 
-# Run full verification (typecheck, lint, test, e2e, build)
+# Full verification (typecheck, lint, test, e2e, build)
 npm run ci:verify
 ```
 
-## Threat Intelligence
+## Optional: Threat Intelligence Setup
 
-QRCheck can integrate with external threat intelligence sources for enhanced protection. This is optional - the tool works perfectly well without it.
+Want even stronger protection? You can enable Google Safe Browsing (recommended) or AbuseIPDB.
 
-### Available Security Feeds
+### Google Safe Browsing
 
-**Google Safe Browsing API** (Recommended)
-- Detects: Malware, phishing, social engineering, unwanted software
-- Requires: Free API key
-- Response time: ~200-500ms
+1. **Get an API key**:
+   - Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Create a project or select an existing one
+   - Enable the Safe Browsing API
+   - Create an API key under "Credentials"
 
-**AbuseIPDB** (Optional IP reputation)
-- Detects: High-abuse IP addresses and hostile infrastructure
-- Method: REST API (requires free AbuseIPDB key)
-- Response time: ~200-500ms (only triggered for direct IP destinations)
+2. **Add to your environment**:
 
-**Pattern Analysis** (Built-in)
-- Detects: Suspicious TLDs, keywords, IP addresses
-- Method: Local pattern matching
-- Response time: Instant
+   For local development:
+   ```bash
+   cp .env.example .env
+   # Edit .env and add:
+   GSB_API_KEY=your_api_key_here
+   ```
 
-**URLHaus** (Built-in)
-- Detects: Malware distribution URLs
-- Method: JSON API + local cache
-- Updates: Nightly via GitHub Action
+   For Netlify deployment:
+   - Go to Site Settings → Environment Variables
+   - Add `GSB_API_KEY` with your API key
 
-### Setting Up Google Safe Browsing (Optional)
+### AbuseIPDB (Optional)
 
-**Step 1: Get API Key**
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project or select existing one
-3. Enable Safe Browsing API (APIs & Services → Library)
-4. Create API key (APIs & Services → Credentials)
-5. Optionally restrict key to Safe Browsing API only
-
-**Step 2: Configure Environment**
-
-For local development:
+Similar setup for IP reputation checking:
 ```bash
-cp .env.example .env
-# Edit .env and add:
-GSB_API_KEY=your_google_safe_browsing_api_key_here
+ABUSEIPDB_API_KEY=your_abuseipdb_key_here
 ```
 
-For Netlify deployment:
-1. Go to Site settings → Build & deploy → Environment
-2. Add environment variable:
-   - Key: `GSB_API_KEY`
-   - Value: Your API key
-
-### Security Features
-
-- Server-side URL resolution via Netlify Functions
-- Maximum 10 redirect hops with 5-second timeouts
-- Input validation and sanitization
-- No caching of results
-- Privacy-first design
-
-## Deployment
-
-To deploy to Netlify:
+## Deploy to Netlify
 
 1. Push your code to GitHub
 2. Connect your repository to Netlify
-3. Configure environment variables (if using Google Safe Browsing)
-4. Netlify will automatically build and deploy
+3. Add environment variables (if using threat intelligence)
+4. Deploy!
+
+Netlify will handle the build and deployment automatically.
 
 ## Contributing
 
-Contributions are welcome! Here's how to get started:
+Want to help make QRCheck better? Contributions are welcome!
+
+### How to Contribute
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature-name`)
+2. Create a feature branch: `git checkout -b feature-name`
 3. Make your changes
 4. Add tests for new functionality
-5. Ensure all tests pass (`npm run ci:verify`)
+5. Run verification: `npm run ci:verify`
 6. Submit a pull request
 
-### Areas for Contribution
+### Ideas for Contributions
 
-- New security features and threat feeds
+- New security checks or threat feeds
 - UI/UX improvements
 - Performance optimizations
-- Documentation updates
+- Better documentation
 - Bug fixes
 
-### Architecture
+### Project Structure
 
-- `src/lib/decode.ts` - QR code decoding and content parsing
-- `src/lib/heuristics.ts` - Heuristic analysis engine
-- `src/lib/shortener.ts` - URL shortener detection
-- `src/lib/api.ts` - Netlify Function API integration
-- `src/lib/camera.ts` - Camera handling for live scanning
-- `src/App.svelte` - Main application component
-- `functions/` - Netlify Functions for server-side processing
-- `netlify.toml` - Netlify configuration
+```
+src/lib/decode.ts      — QR code decoding and content parsing
+src/lib/heuristics.ts  — Heuristic analysis engine
+src/lib/shortener.ts   — URL shortener detection
+src/lib/api.ts         — Netlify Function integration
+src/lib/camera.ts      — Camera handling
+src/App.svelte         — Main application
+functions/             — Netlify Functions (server-side)
+netlify.toml           — Netlify configuration
+```
 
 ## Troubleshooting
 
-### Google Safe Browsing API Not Working
+### Google Safe Browsing isn't working
+- Make sure `GSB_API_KEY` is set in Netlify environment variables
+- Verify the Safe Browsing API is enabled in Google Cloud Console
+- Check that your API key isn't restricted too tightly
 
-**Symptoms**: Low threat detection, missing Google Safe Browsing in results
+### Environment variables not loading
+- **Local**: Ensure `.env` file exists and is formatted correctly
+- **Netlify**: Double-check the variables in your dashboard
+- **Debug**: Look at Netlify function logs for clues
 
-**Solutions**:
-- Verify `GSB_API_KEY` is set correctly in Netlify environment
-- Ensure Safe Browsing API is enabled in Google Cloud Console
-- Check API quotas (Google provides generous free tier)
-- Verify API key restrictions aren't too strict
-
-### Environment Variables Not Working
-
-**Symptoms**: Functions not using API keys, different behavior between local and production
-
-**Solutions**:
-- **Local**: Ensure `.env` file exists and is properly formatted
-- **Netlify**: Check environment variables in Netlify dashboard
-- **Build**: Verify environment variables are available during build
-- **Debug**: Check Netlify function logs for issues
-
-### Functions Not Deploying
-
-**Symptoms**: 404 errors when calling API endpoints
-
-**Solutions**:
-- Ensure functions are in `functions/` directory
+### Functions returning 404
+- Verify functions are in the `functions/` directory
 - Check `netlify.toml` configuration
 - Look for build errors in Netlify deploy logs
-- Verify function names match file names
 
-### Performance Issues
-
-**Symptoms**: Slow threat analysis, timeouts
-
-**Solutions**:
-- External APIs like Google Safe Browsing or AbuseIPDB can add ~500ms (expected)
-- Functions may be slow on first use (cold start)
-- Too many concurrent requests can cause delays
-
-## Privacy
-
-QRCheck is designed with privacy in mind:
-
-- **Client-side Processing**: Most analysis happens in your browser
-- **Secure Function Calls**: API calls made via secure Netlify Functions
-- **No Data Storage**: No URLs or analysis results are stored or tracked
-- **Minimal Logging**: Only aggregate metrics and error logs are collected
-- **Open Source**: All code is publicly auditable
-- **API Key Security**: Environment variables keep API keys secure
-
-### Data Flow
-1. **QR Code** → Browser (local decoding)
-2. **URL Analysis** → Browser (local heuristics)
-3. **Threat Intelligence** → Netlify Functions (secure API calls)
-4. **Results** → Browser (no data stored)
-
-### What We Don't Do
-- Store scanned URLs
-- Track user behavior
-- Use analytics or tracking
-- Share data with third parties
-- Log personal information
+### Slow performance
+- External APIs (Google Safe Browsing, AbuseIPDB) add ~200-500ms latency
+- First function call may be slow (cold start)
+- This is expected behavior for threat intelligence lookups
 
 ## License
 
-MIT License - see LICENSE file for details.
+MIT License — see [LICENSE](LICENSE) for details.
+
+---
+
+**Have questions or feedback?** Open an issue on GitHub or submit a pull request. Stay safe out there! 🛡️
