@@ -148,6 +148,8 @@
   let entryFileInput: HTMLInputElement | null = null;
   let videoEl: HTMLVideoElement | null = null;
   let stream: MediaStream | null = null;
+  let videoErrorHandler: ((e: Event) => void) | null = null;
+  let videoEndedHandler: (() => void) | null = null;
   let scanFrameHandle: number | null = null;
   let copyFeedback = '';
   let copyFeedbackTimeout: number | null = null;
@@ -419,18 +421,30 @@
       }
       videoEl.srcObject = stream;
 
-      // Add video event listeners for error handling
-      videoEl.addEventListener('error', (e) => {
+      // Clean up any existing event listeners first
+      if (videoErrorHandler && videoEl) {
+        videoEl.removeEventListener('error', videoErrorHandler);
+      }
+      if (videoEndedHandler && videoEl) {
+        videoEl.removeEventListener('ended', videoEndedHandler);
+      }
+
+      // Create new event handlers
+      videoErrorHandler = (e) => {
         console.error('Video error:', e);
         stopCameraScan('error');
         cameraError = 'Video playback failed.';
-      });
+      };
 
-      videoEl.addEventListener('ended', () => {
+      videoEndedHandler = () => {
         console.log('Video ended unexpectedly');
         stopCameraScan('error');
         cameraError = 'Video stream ended unexpectedly.';
-      });
+      };
+
+      // Add video event listeners for error handling
+      videoEl.addEventListener('error', videoErrorHandler);
+      videoEl.addEventListener('ended', videoEndedHandler);
 
       await videoEl.play();
 
@@ -462,6 +476,15 @@
       stream = null;
     }
     if (videoEl) {
+      // Remove event listeners before cleaning up
+      if (videoErrorHandler) {
+        videoEl.removeEventListener('error', videoErrorHandler);
+        videoErrorHandler = null;
+      }
+      if (videoEndedHandler) {
+        videoEl.removeEventListener('ended', videoEndedHandler);
+        videoEndedHandler = null;
+      }
       videoEl.srcObject = null;
     }
     scanning = false;
