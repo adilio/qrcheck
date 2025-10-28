@@ -3,20 +3,23 @@
 ## Current Threat Intelligence Providers
 
 ### Primary Feeds
-- **URLVoid**: Free HTML scraping API; checks for security detections. Always queried first with 40-point scoring.
 - **Google Safe Browsing**: Real-time threat detection with 40-point scoring.
   - Environment Variable: `GSB_API_KEY` (required for full functionality)
   - Fallback: Pattern analysis with 20-point scoring when no API key
   - Endpoint: `https://safebrowsing.googleapis.com/v4/threatMatches:find`
   - Client ID: `qrcheck` version `1.0.0`
+- **AbuseIPDB**: IP reputation scoring for direct-IP destinations (25–60 points depending on confidence/report volume).
+  - Environment Variable: `ABUSEIPDB_API_KEY`
+  - Endpoint: `https://api.abuseipdb.com/api/v2/check`
+  - Trigger: Only queried when the resolved host is an IP address.
 
 ### Legacy Feeds (Removed)
 - ~~PhishTank~~: Previously used but no longer maintained
 - ~~Phish.report~~: Requires paid subscription, removed to maintain free functionality
 
 ### Risk Scoring
-- **URLVoid**: 40 points per detection
 - **Google Safe Browsing**: 40 points (API) or 20 points (pattern fallback)
+- **AbuseIPDB**: 25/40/60 based on confidence score and report volume
 - **Risk Tiers**: High ≥ 80, Moderate ≥ 40, Low > 0
 
 ### Infrastructure
@@ -40,6 +43,7 @@
 ## Environment Variables Required
 ```
 GSB_API_KEY=your_google_safe_browsing_key (optional for fallback)
+ABUSEIPDB_API_KEY=your_abuseipdb_api_key
 ```
 
 ## Monitoring Considerations

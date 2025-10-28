@@ -117,11 +117,11 @@ QRCheck performs multiple security checks on URLs. Here's exactly what gets anal
 - **Scoring**: +40 points per threat detected
 - **Response Time**: ~200-500ms
 
-**URLVoid** (Always available)
-- **Method**: HTML scraping of security analysis
-- **Detection**: General security threats, virus detections
-- **Scoring**: +40 points per detection
-- **Response Time**: ~1-2 seconds
+**AbuseIPDB** (Optional IP reputation)
+- **Method**: REST API query for known abusive hosts
+- **Detection**: Malicious infrastructure, high-abuse IP addresses
+- **Scoring**: +25 to +60 based on confidence and report volume
+- **Response Time**: ~200-500ms (only triggered for direct IP destinations)
 
 **URLHaus** (Built-in)
 - **Specialization**: Malware distribution URLs
@@ -200,10 +200,10 @@ QRCheck can integrate with external threat intelligence sources for enhanced pro
 - Requires: Free API key
 - Response time: ~200-500ms
 
-**URLVoid** (Always available)
-- Detects: General security threats, virus detections
-- Method: HTML scraping (no API key required)
-- Response time: ~1-2 seconds
+**AbuseIPDB** (Optional IP reputation)
+- Detects: High-abuse IP addresses and hostile infrastructure
+- Method: REST API (requires free AbuseIPDB key)
+- Response time: ~200-500ms (only triggered for direct IP destinations)
 
 **Pattern Analysis** (Built-in)
 - Detects: Suspicious TLDs, keywords, IP addresses
@@ -323,7 +323,7 @@ Contributions are welcome! Here's how to get started:
 **Symptoms**: Slow threat analysis, timeouts
 
 **Solutions**:
-- External APIs like URLVoid can take 1-2 seconds (this is normal)
+- External APIs like Google Safe Browsing or AbuseIPDB can add ~500ms (expected)
 - Functions may be slow on first use (cold start)
 - Too many concurrent requests can cause delays
 

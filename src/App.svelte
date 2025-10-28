@@ -784,8 +784,8 @@
 
   const intelIcons: Record<string, string> = {
     'Google Safe Browsing': '🛡️',
-    URLVoid: '🕵️',
     URLHaus: '🌐',
+    AbuseIPDB: '🚨',
     'Threat intelligence': '🛰️'
   };
 

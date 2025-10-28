@@ -40,6 +40,57 @@ async function queryGoogleSafeBrowsing(targetUrl: string): Promise<Array<{ threa
   return payload.threatMatches ?? [];
 }
 
+function isIpAddress(input: string): boolean {
+  return /^(?:\d{1,3}\.){3}\d{1,3}$/.test(input);
+}
+
+interface AbuseIpdbResult {
+  abuseConfidenceScore: number;
+  totalReports: number;
+  lastReportedAt?: string;
+  countryCode?: string;
+  usageType?: string;
+}
+
+async function queryAbuseIpdb(ipAddress: string): Promise<AbuseIpdbResult | null> {
+  const apiKey = process.env.ABUSEIPDB_API_KEY;
+  if (!apiKey) {
+    console.warn('threat-intel: ABUSEIPDB_API_KEY is not set, skipping lookup');
+    return null;
+  }
+
+  const endpoint = new URL('https://api.abuseipdb.com/api/v2/check');
+  endpoint.searchParams.set('ipAddress', ipAddress);
+  endpoint.searchParams.set('maxAgeInDays', '90');
+
+  const response = await fetch(endpoint, {
+    method: 'GET',
+    headers: {
+      Key: apiKey,
+      Accept: 'application/json'
+    },
+    signal: AbortSignal.timeout(6_000)
+  });
+
+  if (!response.ok) {
+    throw new Error(`AbuseIPDB request failed: ${response.status}`);
+  }
+
+  const payload = await response.json();
+  const data = payload?.data;
+  if (!data) {
+    return null;
+  }
+
+  return {
+    abuseConfidenceScore: Number(data.abuseConfidenceScore) || 0,
+    totalReports: Number(data.totalReports) || 0,
+    lastReportedAt: data.lastReportedAt ?? undefined,
+    countryCode: data.countryCode ?? undefined,
+    usageType: data.usageType ?? undefined
+  };
+}
+
 export const handler: Handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
@@ -53,33 +104,13 @@ export const handler: Handler = async (event) => {
     }
 
     const target = url || `http://${domain}`;
+    const parsed = new URL(target);
+    const hostname = parsed.hostname.toLowerCase();
+    const hostIsIp = isIpAddress(hostname);
     let riskPoints = 0;
     const threats: Array<{ source: string; details: string; score: number }> = [];
     const sourcesChecked: string[] = [];
-
-    // Check 1: URLVoid (free API, no key required)
-    try {
-      const urlvoidResponse = await fetch(`https://www.urlvoid.com/scan/${target}`);
-      if (urlvoidResponse.ok) {
-        // Parse HTML response (URLVoid doesn't have a free JSON API)
-        const html = await urlvoidResponse.text();
-        const detections = html.match(/detections.*?(\d+)/i);
-        if (detections && parseInt(detections[1]) > 0) {
-          riskPoints += 40;
-          threats.push({
-            source: 'URLVoid',
-            details: `${detections[1]} security detections`,
-            score: 40
-          });
-        }
-      }
-      sourcesChecked.push('URLVoid');
-    } catch (e) {
-      console.warn('threat-intel: URLVoid lookup failed', { error: e, target });
-      sourcesChecked.push('URLVoid');
-    }
-
-    // Check 2: Google Safe Browsing (real API or pattern fallback)
+    // Check 1: Google Safe Browsing (real API or pattern fallback)
     try {
       const matches = await queryGoogleSafeBrowsing(target);
       sourcesChecked.push('Google Safe Browsing');
@@ -95,6 +126,49 @@ export const handler: Handler = async (event) => {
     } catch (error) {
       console.warn('threat-intel: GSB lookup failed', { error, target });
       sourcesChecked.push('Google Safe Browsing');
+    }
+
+    // Check 2: AbuseIPDB (only for direct IP destinations)
+    if (hostIsIp && process.env.ABUSEIPDB_API_KEY) {
+      try {
+        const abuse = await queryAbuseIpdb(hostname);
+        sourcesChecked.push('AbuseIPDB');
+
+        if (abuse) {
+          const confidence = abuse.abuseConfidenceScore;
+          const totalReports = abuse.totalReports;
+
+          let score = 0;
+          if (confidence >= 80 || totalReports >= 20) {
+            score = 60;
+          } else if (confidence >= 50 || totalReports >= 10) {
+            score = 40;
+          } else if (confidence >= 25 || totalReports >= 5) {
+            score = 25;
+          }
+
+          if (score > 0) {
+            riskPoints += score;
+            const detailParts = [`Confidence ${confidence}/100`, `${totalReports} report${totalReports === 1 ? '' : 's'}`];
+            if (abuse.countryCode) {
+              detailParts.push(`Country ${abuse.countryCode}`);
+            }
+            if (abuse.lastReportedAt) {
+              detailParts.push(`Last seen ${abuse.lastReportedAt}`);
+            }
+            threats.push({
+              source: 'AbuseIPDB',
+              details: `Malicious IP reputation: ${detailParts.join(', ')}`,
+              score
+            });
+          }
+        }
+      } catch (error) {
+        sourcesChecked.push('AbuseIPDB');
+        console.warn('threat-intel: AbuseIPDB lookup failed', { error, target });
+      }
+    } else if (hostIsIp && !process.env.ABUSEIPDB_API_KEY) {
+      console.warn('threat-intel: AbuseIPDB lookup skipped because ABUSEIPDB_API_KEY is undefined');
     }
 
     // Determine overall threat level by risk tiers
