@@ -627,22 +627,17 @@
         // Only auto-expand checks if there are actual issues found
         checksOpen = formattedHeuristics?.issues.length > 0;
 
-        // Wait for DOM to update, then scroll and check for auto-expansions
-        tick().then(() => {
-          // Auto-expand threat intel only if there are danger results
-          if (intelCards && intelCards.length > 0 && hasActionableIntel(intelCards)) {
-            intelOpen = true;
-            console.log('Auto-expanding threat intel due to block status');
-          }
+        // Auto-expand threat intel only if there are danger results
+        if (intelCards && intelCards.length > 0 && hasActionableIntel(intelCards)) {
+          intelOpen = true;
+          console.log('Auto-expanding threat intel due to block status');
+        }
 
-          // Auto-expand redirect chain only if there are multiple hops (shortened URLs)
-          if (hops && hops.length > 1) {
-            redirectsOpen = true;
-            console.log('Auto-expanding redirect chain due to shortened URL');
-          }
-
-          scrollToResults();
-        });
+        // Auto-expand redirect chain only if there are multiple hops (shortened URLs)
+        if (hops && hops.length > 1) {
+          redirectsOpen = true;
+          console.log('Auto-expanding redirect chain due to shortened URL');
+        }
       }
     } catch (err: any) {
       flow = 'error';
@@ -696,25 +691,25 @@
       // Only auto-expand checks if there are actual issues found
       checksOpen = formattedHeuristics?.issues.length > 0;
 
-      // Wait for DOM to update, then scroll and check for auto-expansions
-      tick().then(() => {
-        // Auto-expand threat intel only if there are danger results
-        if (intelCards && intelCards.length > 0 && hasActionableIntel(intelCards)) {
-          intelOpen = true;
-          console.log('Auto-expanding threat intel due to block status');
-        }
+      // Auto-expand threat intel only if there are danger results
+      if (intelCards && intelCards.length > 0 && hasActionableIntel(intelCards)) {
+        intelOpen = true;
+        console.log('Auto-expanding threat intel due to block status');
+      }
 
-        // Auto-expand redirect chain only if there are multiple hops (shortened URLs)
-        if (hops && hops.length > 1) {
-          redirectsOpen = true;
-          console.log('Auto-expanding redirect chain due to shortened URL');
-        }
-
-        scrollToResults();
-      });
+      // Auto-expand redirect chain only if there are multiple hops (shortened URLs)
+      if (hops && hops.length > 1) {
+        redirectsOpen = true;
+        console.log('Auto-expanding redirect chain due to shortened URL');
+      }
     } finally {
       step = '';
       showProgressSection = false; // Hide progress section when complete
+
+      // Now scroll to results after the analysis section is visible
+      tick().then(() => {
+        scrollToResults();
+      });
     }
   }
 
