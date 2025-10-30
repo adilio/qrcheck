@@ -707,8 +707,11 @@
       showProgressSection = false; // Hide progress section when complete
 
       // Now scroll to results after the analysis section is visible
+      // Use multiple delays to handle production build timing differences
       tick().then(() => {
-        scrollToResults();
+        setTimeout(() => {
+          scrollToResults();
+        }, 100); // Extra delay for production environment
       });
     }
   }
@@ -1017,8 +1020,12 @@
   function scrollToResults() {
     if (typeof document === 'undefined') return;
 
-    // Use requestAnimationFrame for better timing across environments
-    requestAnimationFrame(() => {
+    console.log('🔄 scrollToResults called, showProgressSection:', showProgressSection);
+
+    // More robust approach for production environment
+    const attemptScroll = (attempt = 1) => {
+      console.log(`🎯 Scroll attempt ${attempt}, showProgressSection: ${showProgressSection}`);
+
       // Try multiple potential scroll targets in order of preference
       const targets = [
         '.analysis-results',           // New analysis results section
@@ -1033,19 +1040,31 @@
       for (const selector of targets) {
         const element = document.querySelector(selector);
         if (element) {
-          console.log(`Scrolling to ${selector}`);
-          element.scrollIntoView({
-            behavior: 'smooth',
-            block: 'start'
-          });
-          targetFound = true;
-          break;
+          // Check if element is actually visible
+          const rect = element.getBoundingClientRect();
+          const isVisible = rect.height > 0 && rect.width > 0;
+
+          console.log(`📍 Found ${selector}, visible: ${isVisible}, height: ${rect.height}`);
+
+          if (isVisible) {
+            console.log(`✅ Scrolling to ${selector}`);
+            element.scrollIntoView({
+              behavior: 'smooth',
+              block: 'start'
+            });
+            targetFound = true;
+            break;
+          }
         }
       }
 
-      if (!targetFound) {
-        console.log('No scroll targets found, using fallback');
-        // Fallback: scroll to bottom with a small delay
+      // If no target found and we haven't tried too many times, retry
+      if (!targetFound && attempt < 5) {
+        console.log(`⏳ No visible targets found, retrying in ${attempt * 200}ms...`);
+        setTimeout(() => attemptScroll(attempt + 1), attempt * 200);
+      } else if (!targetFound) {
+        console.log('❌ No scroll targets found after 5 attempts, using fallback');
+        // Final fallback: scroll to bottom
         setTimeout(() => {
           window.scrollTo({
             top: document.body.scrollHeight,
@@ -1053,6 +1072,11 @@
           });
         }, 100);
       }
+    };
+
+    // Start the scroll attempts
+    requestAnimationFrame(() => {
+      attemptScroll();
     });
   }
 
