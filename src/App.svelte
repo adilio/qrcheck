@@ -1050,7 +1050,7 @@
             console.log(`✅ Scrolling to ${selector}`);
             element.scrollIntoView({
               behavior: 'smooth',
-              block: 'start'
+              block: 'center'
             });
             targetFound = true;
             break;
