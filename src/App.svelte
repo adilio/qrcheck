@@ -1022,25 +1022,43 @@
   function scrollToResults() {
     if (typeof document === 'undefined') return;
 
-    // Add a longer delay to ensure the DOM has fully rendered
-    setTimeout(() => {
-      // Find the verdict card
-      const verdictCard = document.querySelector('.verdict-card');
-      if (verdictCard) {
-        console.log('Scrolling to verdict card');
-        verdictCard.scrollIntoView({
-          behavior: 'smooth',
-          block: 'start'
-        });
-      } else {
-        console.log('Verdict card not found, trying fallback');
-        // Fallback: scroll to the bottom of the page
-        window.scrollTo({
-          top: document.body.scrollHeight,
-          behavior: 'smooth'
-        });
+    // Use requestAnimationFrame for better timing across environments
+    requestAnimationFrame(() => {
+      // Try multiple potential scroll targets in order of preference
+      const targets = [
+        '.analysis-results',           // New analysis results section
+        '.verdict-card',              // Original verdict card
+        '.result-summary',            // Summary card within results
+        '.content-panel',             // Content type panel
+        '.analysis-complete'          // Fallback class
+      ];
+
+      let targetFound = false;
+
+      for (const selector of targets) {
+        const element = document.querySelector(selector);
+        if (element) {
+          console.log(`Scrolling to ${selector}`);
+          element.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start'
+          });
+          targetFound = true;
+          break;
+        }
       }
-    }, 300); // Increased to 300ms delay
+
+      if (!targetFound) {
+        console.log('No scroll targets found, using fallback');
+        // Fallback: scroll to bottom with a small delay
+        setTimeout(() => {
+          window.scrollTo({
+            top: document.body.scrollHeight,
+            behavior: 'smooth'
+          });
+        }, 100);
+      }
+    });
   }
 
   
