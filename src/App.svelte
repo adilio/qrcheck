@@ -1101,7 +1101,8 @@
 
       // Try multiple potential scroll targets in order of preference
       const targets = [
-        '.analysis-results',           // New analysis results section
+        '.results-card',              // Progressive Results Card (NEW - priority)
+        '.analysis-results',          // Analysis results section
         '.verdict-card',              // Original verdict card
         '.result-summary',            // Summary card within results
         '.content-panel',             // Content type panel
