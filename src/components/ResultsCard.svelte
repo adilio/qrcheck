@@ -49,6 +49,7 @@
 
   $: config = verdictConfig[verdict];
   $: allChecksComplete = tier1Complete && tier2Complete && tier3Complete;
+  $: showSpinner = verdict === 'analyzing' || !tier1Complete;
 </script>
 
 <div class="results-card" transition:fade={{ duration: 200 }}>
@@ -63,7 +64,7 @@
         <div class="verdict-title">{config.text}</div>
         <div class="verdict-message">{config.message}</div>
       </div>
-      {#if !allChecksComplete}
+      {#if showSpinner}
         <div class="spinner" transition:fade={{ duration: 150 }}>
           <div class="spinner-circle"></div>
         </div>
