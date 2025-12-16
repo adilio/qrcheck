@@ -697,18 +697,19 @@
         }
 
         // Update tier completion states and checks
-        if (tieredResult.tier1) {
+        // Only update each tier when it first becomes available
+        if (tieredResult.tier1 && !tier1Complete) {
           tier1Checks = [...checks.tier1]; // Force new array reference for reactivity
           tier1Complete = true;
         }
 
-        if (tieredResult.tier2) {
+        if (tieredResult.tier2 && !tier2Complete) {
           console.log('✅ Tier 2 complete, checks:', checks.tier2);
           tier2Checks = [...checks.tier2]; // Force new array reference for reactivity
           tier2Complete = true;
         }
 
-        if (tieredResult.tier3) {
+        if (tieredResult.tier3 && !tier3Complete) {
           console.log('✅ Tier 3 complete, checks:', checks.tier3);
           console.log('Tier 3 result details:', {
             domainAge: latestResult.details?.domainAge,
