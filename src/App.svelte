@@ -693,31 +693,22 @@
       const knownShorteners = ['bit.ly', 'tinyurl.com', 't.co', 'qrco.de', 'buff.ly', 'goo.gl', 'ow.ly', 'tiny.cc'];
       const isKnownShortener = knownShorteners.some(shortener => domain.includes(shortener));
 
-      // Progressive redirect expansion: show first hop immediately
-      const firstHopResult = await expandFirstHop(raw);
-      hops = firstHopResult.chain;
-      urlText = firstHopResult.finalUrl;
+      // Use resolveChain for better CORS handling with Netlify Functions
+      // This provides better redirect expansion than client-side only
+      const redirectResult = await resolveChain(raw);
+      hops = redirectResult.hops;
+      urlText = redirectResult.final;
+
+      // Check if redirect expansion was blocked (only one hop means no expansion happened)
       redirectExpansionBlocked = isKnownShortener && hops.length === 1;
-
-      // Force UI update to show first hop immediately
-      await tick();
-
-      // Continue expanding full chain in background (non-blocking)
-      expandFullChain(raw).then(fullResult => {
-        hops = fullResult.chain;
-        urlText = fullResult.finalUrl;
-        redirectExpansionBlocked = isKnownShortener && fullResult.chain.length === 1;
-      }).catch(err => {
-        console.warn('Full redirect chain expansion failed:', err);
-      });
 
       // Execute threat intelligence steps
       await executeAnalysisStep('threat-intel-google');
       await executeAnalysisStep('threat-intel-abuseipdb');
       await executeAnalysisStep('threat-intel-urlhaus');
 
-      // Run the actual threat intelligence check on the first hop result
-      intelRes = await intel(firstHopResult.finalUrl || raw);
+      // Run the actual threat intelligence check on the final resolved URL
+      intelRes = await intel(redirectResult.final || raw);
 
       flow = 'complete';
       // Only auto-expand checks if there are actual issues found
