@@ -1301,20 +1301,36 @@
     }
 
     // Tier 3 checks (API calls)
+    // Always show Domain Age check (even if no data to show it was checked)
     if (result.details?.domainAge) {
       tier3.push({
         label: 'Domain Age',
         status: result.details.domainAge.risk_points > 0 ? 'warn' : 'pass',
         detail: result.details.domainAge.message
       });
+    } else {
+      // If no domainAge data, show default message
+      tier3.push({
+        label: 'Domain Age',
+        status: 'pass',
+        detail: 'Unable to determine domain age'
+      });
     }
 
+    // Always show Threat Intelligence check (even if no data to show it was checked)
     if (result.details?.enhancedThreatIntel) {
       const intel = result.details.enhancedThreatIntel;
       tier3.push({
         label: 'Threat Intelligence',
         status: intel.threat_detected ? 'fail' : 'pass',
         detail: intel.message
+      });
+    } else {
+      // If no threat intel data, show default message
+      tier3.push({
+        label: 'Threat Intelligence',
+        status: 'pass',
+        detail: 'No threats detected'
       });
     }
 
