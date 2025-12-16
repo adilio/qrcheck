@@ -121,19 +121,6 @@
     }
   };
 
-  const heuristicsLegend = [
-    { text: 'Not HTTPS', score: '+15' },
-    { text: 'Suspicious TLD', score: '+20' },
-    { text: 'Punycode / IDN', score: '+10' },
-    { text: 'Executable download', score: '+20' },
-    { text: 'Very long URL', score: '+5' },
-    { text: 'Reputable shortener', score: '+15' },
-    { text: 'Unknown shortener', score: '+45' },
-    { text: 'Suspicious keywords', score: '+40' },
-    { text: 'data:/file: scheme', score: '+50' },
-    { text: 'Score ≥70 → Block, ≥40 → Warn' }
-  ];
-
   let theme: Theme = 'dark';
   let themeReady = false;
   let flow: FlowState = 'idle';
@@ -187,9 +174,6 @@
 
   let scanning = false;
   let learnMoreOpen = false;
-  let checksOpen = false;
-  let redirectsOpen = false;
-  let intelOpen = false;
   let manualUrlOpen = false;
   let entryFileInput: HTMLInputElement | null = null;
   let videoEl: HTMLVideoElement | null = null;
@@ -299,9 +283,6 @@
     intelRes = null;
     originalInputUrl = '';
     learnMoreOpen = false;
-    checksOpen = false;
-    redirectsOpen = false;
-    intelOpen = false;
     flow = 'processing';
 
     // Initialize transparent analysis steps
@@ -636,20 +617,6 @@
         // Run heuristics analysis for non-URL content
         await runHeuristicsAnalysis(qrContent);
         flow = 'complete';
-        // Only auto-expand checks if there are actual issues found
-        checksOpen = formattedHeuristics?.issues.length > 0;
-
-        // Auto-expand threat intel only if there are danger results
-        if (intelCards && intelCards.length > 0 && hasActionableIntel(intelCards)) {
-          intelOpen = true;
-          console.log('Auto-expanding threat intel due to block status');
-        }
-
-        // Auto-expand redirect chain only if there are multiple hops (shortened URLs)
-        if (hops && hops.length > 1) {
-          redirectsOpen = true;
-          console.log('Auto-expanding redirect chain due to shortened URL');
-        }
       }
     } catch (err: any) {
       flow = 'error';
@@ -768,20 +735,6 @@
       intelRes = await intel(redirectResult.final || raw);
 
       flow = 'complete';
-      // Only auto-expand checks if there are actual issues found
-      checksOpen = formattedHeuristics?.issues.length > 0;
-
-      // Auto-expand threat intel only if there are danger results
-      if (intelCards && intelCards.length > 0 && hasActionableIntel(intelCards)) {
-        intelOpen = true;
-        console.log('Auto-expanding threat intel due to block status');
-      }
-
-      // Auto-expand redirect chain only if there are multiple hops (shortened URLs)
-      if (hops && hops.length > 1) {
-        redirectsOpen = true;
-        console.log('Auto-expanding redirect chain due to shortened URL');
-      }
     } finally {
       step = '';
       showProgressSection = false; // Hide progress section when complete
@@ -1108,10 +1061,8 @@
 
       // Try multiple potential scroll targets in order of preference
       const targets = [
-        '.results-card',              // Progressive Results Card (NEW - priority)
-        '.analysis-results',          // Analysis results section
-        '.verdict-card',              // Original verdict card
-        '.result-summary',            // Summary card within results
+        '.results-card',              // Progressive Results Card (priority)
+        '.verdict-card',              // Verdict summary
         '.content-panel',             // Content type panel
         '.analysis-complete'          // Fallback class
       ];
@@ -1656,316 +1607,6 @@
           tier3Checks={tier3Checks}
         />
       {/if}
-
-      <!-- Enhanced Analysis Results Breakdown -->
-      {#if analysisSteps.length > 0 && showProgressSection === false}
-        <section class="analysis-results">
-          <h3>🔍 Security Analysis Complete</h3>
-
-          <!-- Summary card -->
-          <div class="result-summary">
-            <div class="summary-card {verdictMetaInfo.tone}">
-              <div class="card-icon">
-                {verdictMetaInfo.emoji}
-              </div>
-              <div class="card-content">
-                <h4>
-                  {#if verdictMetaInfo.tone === 'safe'}✅ Safe to Visit
-                  {:else if verdictMetaInfo.tone === 'warn'}⚠️ Proceed with Caution
-                  {:else}🚫 Dangerous - Avoid
-                  {/if}
-                </h4>
-                <p>
-                  {flaggedChecks.length} {flaggedChecks.length === 1 ? 'issue' : 'issues'} found
-                  • {totalAnalysisTime}ms analysis time
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Only show details for non-safe results -->
-          {#if verdictMetaInfo.tone !== 'safe'}
-            <!-- Detailed breakdown -->
-            <details class="analysis-breakdown" open>
-              <summary class="breakdown-summary">
-                <div class="breakdown-header">
-                  <h4>📋 Security Issues Found</h4>
-                  <span class="chevron">▼</span>
-                </div>
-                <span class="breakdown-subtitle">
-                  Click to view detailed analysis
-                </span>
-              </summary>
-
-              <div class="breakdown-content">
-                {#each analysisSteps as step}
-                  {#if step.status === 'error' || (verdictMetaInfo.tone !== 'safe' && step.status === 'completed')}
-                    <div class="result-item" class:warning={step.status === 'error'} class:skipped={step.status === 'skipped'}>
-                      <div class="result-status">
-                        {step.status === 'completed' ? '✅' : ''}
-                        {step.status === 'error' ? '❌' : ''}
-                        {step.status === 'skipped' ? '⏭️' : ''}
-                        {step.status === 'pending' ? '⏳' : ''}
-                      </div>
-                      <div class="result-details">
-                        <div class="result-header">
-                          <span class="result-name">{step.icon} {step.name}</span>
-                          {#if step.duration}
-                            <span class="result-duration">{step.duration}ms</span>
-                          {/if}
-                        </div>
-                        <div class="result-description">{step.description}</div>
-
-                        {#if step.status === 'error' && step.details}
-                          <div class="result-warning">
-                            <strong>Issue:</strong> {step.details}
-                            <button class="learn-more-btn" on:click={(e) => showInfoTooltip(step.id, e)}>
-                              Learn more
-                            </button>
-                          </div>
-                        {/if}
-                      </div>
-                    </div>
-                  {/if}
-                {/each}
-              </div>
-            </details>
-
-            <!-- Educational summary (only for non-safe) -->
-            <details class="educational-summary" open>
-              <summary class="breakdown-summary">
-                <div class="breakdown-header">
-                  <h4>🎓 What This Means</h4>
-                  <span class="chevron">▼</span>
-                </div>
-                <span class="breakdown-subtitle">
-                  Click to learn about these security checks
-                </span>
-              </summary>
-
-              <div class="educational-content">
-                <p>This URL was flagged because of potential security concerns detected during our analysis.</p>
-
-                <div class="security-tips">
-                  <h5>🛡️ Security Tips:</h5>
-                  <ul>
-                    <li>Always verify where shortened URLs really lead before clicking</li>
-                    <li>Be cautious of URLs with unusual characters or excessive length</li>
-                    <li>Check domain age - newer domains require more scrutiny</li>
-                    <li>Look for HTTPS encryption and valid SSL certificates</li>
-                    <li>Be wary of urgent language or requests for personal information</li>
-                  </ul>
-                </div>
-              </div>
-            </details>
-          {:else}
-            <!-- Simple safe result -->
-            <div class="safe-result">
-              <div class="safe-icon">✅</div>
-              <div class="safe-content">
-                <h4>All Clear!</h4>
-                <p>This URL passed all {analysisSteps.filter(s => s.status === 'completed').length} security checks.</p>
-              </div>
-            </div>
-          {/if}
-        </section>
-      {/if}
-
-      {#if qrContent?.type === 'url' && (redirectCount > 0 || redirectExpansionBlocked)}
-        <div class="url-display">
-          <div class="input-url-section">
-            <h4>URL Analysis</h4>
-            <div class="original-url">
-              <span class="url-label">📍 Input URL:</span>
-              <span class="url-value">{originalInputUrl}</span>
-              <button class="copy-btn-small" type="button" on:click={() => copyToClipboard(originalInputUrl)} title="Copy input URL">
-                📋
-              </button>
-            </div>
-          </div>
-
-          <div class="resolution-section">
-            <h4>Resolution</h4>
-            {#if terminalUrl}
-              <div class="resolved-url">
-                <span class="url-label">🎯 Final URL:</span>
-                <span class="url-value">{terminalUrl}</span>
-                <button class="{getCopyButtonClass()}" type="button" on:click={() => copyToClipboard(terminalUrl)} title="Copy final URL">
-                  {copyFeedback || '📋 Copy'}
-                </button>
-              </div>
-              <div class={`redirect-summary ${!redirectExpansionBlocked && redirectCount === 0 ? 'single' : ''}`}>
-                {#if redirectExpansionBlocked}
-                  <span class="redirect-count">⚠️ Redirects blocked</span>
-                  <span class="redirect-info">Browser security prevented expanding this shortened link</span>
-                {:else if redirectCount > 0}
-                  <span class="redirect-count">{redirectCount} redirect{redirectCount > 1 ? 's' : ''}</span>
-                  <span class="redirect-info">Shortened link expanded to reveal the destination</span>
-                              {/if}
-              </div>
-            {/if}
-          </div>
-        </div>
-          {/if}
-
-      <details class="drawer" bind:open={checksOpen}>
-        <summary>
-          <span>See all checks</span>
-          <span class="drawer-chevron">▶</span>
-        </summary>
-        <div class="risk-summary">
-          <div class="risk-indicator" style="color: {formattedHeuristics.riskColor}">
-            {formattedHeuristics.riskText}
-          </div>
-          <div class="risk-score">{formattedHeuristics.summary}</div>
-        </div>
-
-        {#if formattedHeuristics.issues.length}
-          <ul class="risk-issues">
-            {#each formattedHeuristics.issues as issue (issue.id)}
-              <li class={`risk-issue ${issue.severity}`}>
-                <span class="issue-label">{issue.label}</span>
-                {#if issue.detail}
-                  <span class="issue-detail">{issue.detail}</span>
-                {/if}
-              </li>
-            {/each}
-          </ul>
-        {:else}
-          <p class="no-issues">No issues detected in the latest scan.</p>
-        {/if}
-
-        {#if formattedHeuristics.checks.length}
-          <h4 class="checks-title">Checks completed</h4>
-          <div class="checks-grid">
-            {#each formattedHeuristics.checks as check (check.id)}
-              <div class={`check-row ${check.status}`}>
-                <span class="check-label">{statusIcon(check.status)} {check.label}</span>
-                {#if check.detail}
-                  <span class="check-detail">{check.detail}</span>
-                {/if}
-              </div>
-            {/each}
-          </div>
-        {/if}
-        
-        {#if heuristicsResult.recommendations.length}
-          <div class="recommendations">
-            <h4>Recommendations:</h4>
-            <ul>
-              {#each heuristicsResult.recommendations as recommendation}
-                <li>{recommendation}</li>
-              {/each}
-            </ul>
-          </div>
-        {/if}
-      </details>
-
-      {#if qrContent?.type === 'url' && hops.length > 1}
-        <details class="drawer" bind:open={redirectsOpen}>
-          <summary>
-            <span>📊 Redirect Chain ({hops.length} hops)</span>
-            <span class="drawer-chevron">▶</span>
-          </summary>
-          <div class="redirect-preview">
-            <div class="redirect-path">{hops[0]} → … → {hops[hops.length - 1]}</div>
-          </div>
-          <ol class="redirect-list">
-            {#each hops as hop, index}
-              <li>
-                <span class="redirect-index">
-                  {index === 0 ? '📍 Start' : index === hops.length - 1 ? '🎯 Terminal' : `${index + 1}.`}
-                </span>
-                <span class="redirect-url">{hop}</span>
-              </li>
-            {/each}
-          </ol>
-        </details>
-      {/if}
-
-      {#if intelCards.length}
-        <details class="drawer" bind:open={intelOpen}>
-          <summary>
-            <span>Threat intel</span>
-            <span class="drawer-chevron">▶</span>
-          </summary>
-          <div class="intel-grid">
-            {#each intelCards as card}
-              <div class={`intel-card ${card.status}`}>
-                <span class="intel-source">{card.icon} {card.name}</span>
-                <p class="intel-headline">{card.headline}</p>
-                <p class="intel-detail">{card.detail}</p>
-              </div>
-            {/each}
-          </div>
-        </details>
-      {/if}
-
-      <details class="drawer" bind:open={learnMoreOpen}>
-        <summary>
-          <span>{learnMoreOpen ? 'Hide Learn More' : 'Learn more about these checks'}</span>
-          <span class="drawer-chevron">▶</span>
-        </summary>
-        <section class="learn-more">
-          <h3>How QRCheck evaluates destinations</h3>
-          <div class="learn-list">
-            {#if heuristicsResult.details.shortenerCheck?.isShortener}
-              <div class="learn-item">
-                <span class="learn-term">URL Shortener</span>
-                <span class="learn-copy">Shortened URLs obscure the true destination. Expand the link or rely on preview tools before following it.</span>
-              </div>
-            {/if}
-            
-            {#if heuristicsResult.details.urlLength?.isExcessive}
-              <div class="learn-item">
-                <span class="learn-term">URL Length</span>
-                <span class="learn-copy">Extremely long URLs can hide malicious parameters or tracking payloads. Review the destination in a desktop browser before entering data.</span>
-              </div>
-            {/if}
-            
-            {#if heuristicsResult.details.obfuscation?.hasObfuscation}
-              <div class="learn-item">
-                <span class="learn-term">URL Obfuscation</span>
-                <span class="learn-copy">Obfuscated URLs may use encoding to hide malicious content. Be cautious with URLs that contain unusual encoding patterns.</span>
-              </div>
-            {/if}
-            
-            {#if heuristicsResult.details.suspiciousKeywords?.hasKeywords}
-              <div class="learn-item">
-                <span class="learn-term">Suspicious Keywords</span>
-                <span class="learn-copy">Keywords like "login", "verify", or "security" may be used in phishing attempts. Verify the source before proceeding.</span>
-              </div>
-            {/if}
-            
-            {#if heuristicsResult.details.domainReputation?.isIPBased}
-              <div class="learn-item">
-                <span class="learn-term">IP-based URLs</span>
-                <span class="learn-copy">URLs that use IP addresses instead of domain names may be suspicious. Legitimate services typically use domain names.</span>
-              </div>
-            {/if}
-            
-            {#if heuristicsResult.details.domainReputation?.hasSuspiciousTLD}
-              <div class="learn-item">
-                <span class="learn-term">Suspicious TLD</span>
-                <span class="learn-copy">Some top-level domains see disproportionate abuse because they are cheap or poorly regulated. Confirm that the domain matches the brand you expect.</span>
-              </div>
-            {/if}
-          </div>
-          
-          <div class="legend">
-            <h4>Scoring quick reference</h4>
-            <ul>
-              {#each heuristicsLegend as item}
-                <li>
-                  <span>{item.text}</span>
-                  {#if item.score}<span>{item.score}</span>{/if}
-                </li>
-              {/each}
-            </ul>
-          </div>
-        </section>
-      </details>
-    </section>
   {:else if flow === 'processing'}
     <!-- Enhanced Progress Section -->
     <section class="analysis-progress" class:active={showProgressSection} aria-live="polite" on:click={handleClickOutside}>
@@ -3070,24 +2711,6 @@
     .tooltip-content h4 {
       font-size: 1rem;
     }
-  }
-
-  /* Enhanced Results Display Styles */
-  .analysis-results {
-    background: var(--bg-primary);
-    border-radius: 12px;
-    padding: 24px;
-    margin: 20px 0;
-    border: 1px solid var(--border-color);
-    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
-  }
-
-  .analysis-results h3 {
-    margin: 0 0 20px 0;
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    text-align: center;
   }
 
   .content-panel {
