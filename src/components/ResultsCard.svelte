@@ -110,7 +110,6 @@
         {#each tier1Checks as check, i (check.label + check.status)}
           <div
             class="check-item {check.status}"
-            transition:fade={{ duration: 200, delay: i * 30 }}
           >
             <span class="check-icon">
               {#if check.status === 'pass'}✓{:else if check.status === 'warn'}⚠️{:else}✗{/if}
@@ -142,7 +141,6 @@
         {#each tier2Checks as check, i (check.label + check.status)}
           <div
             class="check-item {check.status}"
-            transition:fade={{ duration: 200, delay: tier2Complete ? i * 30 : 0 }}
           >
             {#if check.status === 'loading'}
               <span class="check-icon loading">
@@ -180,7 +178,6 @@
         {#each tier3Checks as check, i (check.label + check.status)}
           <div
             class="check-item {check.status}"
-            transition:fade={{ duration: 200, delay: tier3Complete ? i * 30 : 0 }}
           >
             {#if check.status === 'loading'}
               <span class="check-icon loading">
