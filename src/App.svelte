@@ -13,7 +13,8 @@
   import { analyzeHeuristicsTiered, type TieredHeuristicResult } from './lib/heuristics-tiered';
   import { resolveChain, intel, type IntelResponse } from './lib/api';
   import { expandFirstHop, expandFullChain } from './lib/expand';
-    import { startCamera, stopCamera } from './lib/camera';
+  import { startCamera, stopCamera } from './lib/camera';
+  import ResultsCard from './components/ResultsCard.svelte';
 
   type VerdictKey = 'SAFE' | 'WARN' | 'BLOCK';
   type IntelStatus = 'clean' | 'warn' | 'block' | 'info' | 'error';
@@ -167,6 +168,15 @@
   }
 
   let analysisSteps: AnalysisStep[] = [];
+
+  // Progressive Results Card State
+  let progressiveVerdict: 'safe' | 'caution' | 'danger' | 'analyzing' = 'analyzing';
+  let tier1Checks: Array<{label: string; status: 'pass' | 'warn' | 'fail'; detail?: string}> = [];
+  let tier2Checks: Array<{label: string; status: 'pass' | 'warn' | 'fail' | 'loading'; detail?: string}> = [];
+  let tier3Checks: Array<{label: string; status: 'pass' | 'warn' | 'fail' | 'loading'; detail?: string}> = [];
+  let tier1Complete = false;
+  let tier2Complete = false;
+  let tier3Complete = false;
   let currentStepIndex = 0;
   let overallProgress = 0;
   let estimatedTimeRemaining = 0;
@@ -651,6 +661,18 @@
   async function runHeuristicsAnalysis(content: QRContent, intel?: IntelResponse) {
     step = 'Analysing locally…';
 
+    // Initialize progressive state
+    progressiveVerdict = 'analyzing';
+    tier1Complete = false;
+    tier2Complete = false;
+    tier3Complete = false;
+    tier1Checks = [];
+    tier2Checks = [{ label: 'URLHaus Database', status: 'loading', detail: 'Checking...' }];
+    tier3Checks = [
+      { label: 'Domain Age', status: 'loading', detail: 'Checking...' },
+      { label: 'Threat Intelligence', status: 'loading', detail: 'Checking...' }
+    ];
+
     // Use progressive tiered analysis for instant feedback
     const progressiveAnalysis = analyzeHeuristicsTiered(content);
 
@@ -661,6 +683,34 @@
       if (latestResult) {
         heuristicsResult = latestResult;
         formattedHeuristics = formatHeuristicResults(latestResult);
+
+        // Build check lists from results
+        const checks = buildProgressiveChecks(latestResult);
+
+        // Update progressive verdict
+        if (latestResult.risk === 'high') {
+          progressiveVerdict = 'danger';
+        } else if (latestResult.risk === 'medium') {
+          progressiveVerdict = 'caution';
+        } else {
+          progressiveVerdict = 'safe';
+        }
+
+        // Update tier completion states and checks
+        if (tieredResult.tier1) {
+          tier1Checks = checks.tier1;
+          tier1Complete = true;
+        }
+
+        if (tieredResult.tier2) {
+          tier2Checks = checks.tier2;
+          tier2Complete = true;
+        }
+
+        if (tieredResult.tier3) {
+          tier3Checks = checks.tier3;
+          tier3Complete = true;
+        }
       }
 
       // Execute analysis steps progressively based on tier
@@ -1168,6 +1218,101 @@
     };
   }
 
+  function buildProgressiveChecks(result: any) {
+    if (!result) return { tier1: [], tier2: [], tier3: [] };
+
+    const tier1: Array<{label: string; status: 'pass' | 'warn' | 'fail'; detail?: string}> = [];
+    const tier2: Array<{label: string; status: 'pass' | 'warn' | 'fail' | 'loading'; detail?: string}> = [];
+    const tier3: Array<{label: string; status: 'pass' | 'warn' | 'fail' | 'loading'; detail?: string}> = [];
+
+    // Tier 1 checks (instant client-side)
+    if (result.details?.shortenerCheck) {
+      tier1.push({
+        label: result.details.shortenerCheck.isShortener ? 'URL Shortener Detected' : 'Direct URL',
+        status: result.details.shortenerCheck.isShortener ? 'warn' : 'pass',
+        detail: result.details.shortenerCheck.domain
+      });
+    }
+
+    if (result.details?.urlLength) {
+      tier1.push({
+        label: 'URL Length',
+        status: result.details.urlLength.isExcessive ? 'warn' : 'pass',
+        detail: result.details.urlLength.isExcessive ? `${result.details.urlLength.value} chars (excessive)` : 'Normal'
+      });
+    }
+
+    if (result.details?.obfuscation) {
+      tier1.push({
+        label: 'Obfuscation Patterns',
+        status: result.details.obfuscation.hasObfuscation ? 'fail' : 'pass',
+        detail: result.details.obfuscation.hasObfuscation ? result.details.obfuscation.patterns.join(', ') : 'None detected'
+      });
+    }
+
+    if (result.details?.suspiciousKeywords) {
+      tier1.push({
+        label: 'Suspicious Keywords',
+        status: result.details.suspiciousKeywords.hasKeywords ? 'warn' : 'pass',
+        detail: result.details.suspiciousKeywords.hasKeywords ? result.details.suspiciousKeywords.matches.join(', ') : 'None found'
+      });
+    }
+
+    if (result.details?.domainReputation) {
+      tier1.push({
+        label: 'Domain Reputation',
+        status: result.details.domainReputation.isIPBased || result.details.domainReputation.hasSuspiciousTLD ? 'warn' : 'pass',
+        detail: result.details.domainReputation.isIPBased ? 'IP-based URL' :
+               result.details.domainReputation.hasSuspiciousTLD ? 'Suspicious TLD' : 'Looks legitimate'
+      });
+    }
+
+    if (result.details?.typosquatting) {
+      tier1.push({
+        label: 'Typosquatting Check',
+        status: result.details.typosquatting.isTyposquat ? 'fail' : 'pass',
+        detail: result.details.typosquatting.isTyposquat ? `Mimics "${result.details.typosquatting.detectedBrand}"` : 'No brand impersonation'
+      });
+    }
+
+    if (result.details?.homographs) {
+      tier1.push({
+        label: 'Homograph Attack',
+        status: result.details.homographs.hasHomographs ? 'fail' : 'pass',
+        detail: result.details.homographs.hasHomographs ? 'Look-alike characters detected' : 'Standard characters'
+      });
+    }
+
+    // Tier 2 checks (fast cached)
+    if (result.details?.threatIntel) {
+      tier2.push({
+        label: 'URLHaus Database',
+        status: result.details.threatIntel.isMalicious ? 'fail' : 'pass',
+        detail: result.details.threatIntel.isMalicious ? 'Listed as malicious' : 'Not in database'
+      });
+    }
+
+    // Tier 3 checks (API calls)
+    if (result.details?.domainAge) {
+      tier3.push({
+        label: 'Domain Age',
+        status: result.details.domainAge.risk_points > 0 ? 'warn' : 'pass',
+        detail: result.details.domainAge.message
+      });
+    }
+
+    if (result.details?.enhancedThreatIntel) {
+      const intel = result.details.enhancedThreatIntel;
+      tier3.push({
+        label: 'Threat Intelligence',
+        status: intel.threat_detected ? 'fail' : 'pass',
+        detail: intel.message
+      });
+    }
+
+    return { tier1, tier2, tier3 };
+  }
+
   function buildIntelCards(data: IntelResponse | null, enhancedSources: FormattedIntelSource[]): IntelCard[] {
     const cardsByName = new Map<string, IntelCard>();
 
@@ -1463,6 +1608,21 @@
             </div>
           </div>
         </section>
+      {/if}
+
+      <!-- Progressive Results Card (New Component) -->
+      {#if qrContent && qrContent.type === 'url' && tier1Complete}
+        <ResultsCard
+          verdict={progressiveVerdict}
+          finalUrl={urlText}
+          redirectChain={hops}
+          tier1Complete={tier1Complete}
+          tier2Complete={tier2Complete}
+          tier3Complete={tier3Complete}
+          tier1Checks={tier1Checks}
+          tier2Checks={tier2Checks}
+          tier3Checks={tier3Checks}
+        />
       {/if}
 
       <!-- Enhanced Analysis Results Breakdown -->
