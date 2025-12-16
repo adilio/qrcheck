@@ -198,6 +198,13 @@
     </div>
   {/if}
 
+  {#if finalUrl}
+    <div class="section">
+      <h4 class="section-title">🎯 Final Destination</h4>
+      <p class="final-url">{finalUrl}</p>
+    </div>
+  {/if}
+
   <!-- Analysis Complete Badge -->
   {#if allChecksComplete}
     <div class="complete-badge">
@@ -413,6 +420,13 @@
     font-size: 0.85rem;
     color: #666;
     font-style: italic;
+  }
+
+  .final-url {
+    margin: 6px 0 0 0;
+    color: #374151;
+    word-break: break-all;
+    font-weight: 600;
   }
 
   .dot-pulse {

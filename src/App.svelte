@@ -171,6 +171,7 @@
   let activeTooltip: string | null = null;
   let tooltipPosition = { x: 0, y: 0 };
   let showProgressSection = false;
+  let detailsOpen = false;
 
   let scanning = false;
   let learnMoreOpen = false;
@@ -284,6 +285,7 @@
     originalInputUrl = '';
     learnMoreOpen = false;
     flow = 'processing';
+    detailsOpen = false;
 
     // Initialize transparent analysis steps
     initializeAnalysisSteps();
@@ -1607,10 +1609,105 @@
           tier3Checks={tier3Checks}
         />
       {/if}
+
+      {#if formattedHeuristics}
+        <section class="analysis-details">
+          <header class="analysis-details__header">
+            <div>
+              <p class="eyebrow">How we scored this</p>
+              <h3>Checks and risk drivers</h3>
+            </div>
+            <button class="toggle-btn" type="button" on:click={() => (detailsOpen = !detailsOpen)} aria-expanded={detailsOpen}>
+              {detailsOpen ? 'Hide details' : 'Show details'}
+            </button>
+          </header>
+
+          {#if detailsOpen}
+            <div class="analysis-details__summary">
+              <div>
+                <p class="label">Risk score</p>
+                <p class="value">{heuristicsResult?.score ?? 0}</p>
+              </div>
+              <div>
+                <p class="label">Verdict</p>
+                <p class="value" style={`color:${formattedHeuristics.riskColor}`}>{formattedHeuristics.riskText}</p>
+              </div>
+              <div>
+                <p class="label">Signals found</p>
+                <p class="value">{formattedHeuristics.issues.length || 'None'}</p>
+              </div>
+            </div>
+
+            {#if formattedHeuristics.issues.length}
+              <div class="analysis-details__section">
+                <h4>Top risk signals</h4>
+                <ul class="issue-list">
+                  {#each formattedHeuristics.issues as issue (issue.id)}
+                    <li class={`issue ${issue.severity}`}>
+                      <span class="issue-label">{issue.label}</span>
+                      {#if issue.detail}<span class="issue-detail">{issue.detail}</span>{/if}
+                    </li>
+                  {/each}
+                </ul>
+              </div>
+            {/if}
+
+            {#if formattedHeuristics.checks.length}
+              <div class="analysis-details__section">
+                <h4>What we checked</h4>
+                <div class="checks-grid">
+                  {#each formattedHeuristics.checks as check (check.id)}
+                    <div class={`check-row ${check.status}`}>
+                      <div class="check-title">{statusIcon(check.status)} {check.label}</div>
+                      {#if check.detail}<div class="check-detail">{check.detail}</div>{/if}
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+
+            {#if intelCards.length}
+              <div class="analysis-details__section">
+                <h4>Threat intelligence</h4>
+                <div class="intel-grid">
+                  {#each intelCards as card}
+                    <div class={`intel-card ${card.status}`}>
+                      <span class="intel-source">{card.icon} {card.name}</span>
+                      <p class="intel-headline">{card.headline}</p>
+                      <p class="intel-detail">{card.detail}</p>
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+
+            {#if qrContent?.type === 'url' && hops.length > 1}
+              <div class="analysis-details__section">
+                <h4>Redirect chain</h4>
+                <p class="redirect-path">{hops[0]} → … → {hops[hops.length - 1]}</p>
+                <ol class="redirect-list">
+                  {#each hops as hop, index}
+                    <li>
+                      <span class="redirect-index">
+                        {index === 0 ? 'Start' : index === hops.length - 1 ? 'Final' : `Hop ${index}`}
+                      </span>
+                      <span class="redirect-url">{hop}</span>
+                    </li>
+                  {/each}
+                </ol>
+              </div>
+            {/if}
+          {/if}
+        </section>
+      {/if}
     </section>
   {:else if flow === 'processing'}
     <!-- Enhanced Progress Section -->
-    <section class="analysis-progress" class:active={showProgressSection} aria-live="polite" on:click={handleClickOutside}>
+    <section
+      class="analysis-progress"
+      class:active={showProgressSection}
+      aria-live="polite"
+    >
       <h3>🔍 Security Analysis in Progress</h3>
 
       <!-- Overall progress bar -->
@@ -1680,9 +1777,9 @@
         <div
           class="info-tooltip active"
           style="left: {tooltipPosition.x}px; top: {tooltipPosition.y}px"
-          role="tooltip"
+          role="dialog"
+          aria-modal="false"
           aria-labelledby="tooltip-title-{step.id}"
-          on:click|stopPropagation
         >
           <div class="tooltip-content">
             <h4 id="tooltip-title-{step.id}">{step.icon} {step.name}</h4>
@@ -1852,6 +1949,177 @@
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+  }
+
+  /* Analysis details (single expandable panel) */
+  .analysis-details {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 20px;
+    margin: 20px 0;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  }
+
+  .analysis-details__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .analysis-details__header h3 {
+    margin: 4px 0 0 0;
+    color: var(--text-primary);
+  }
+
+  .analysis-details__summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 12px;
+    margin: 16px 0;
+  }
+
+  .analysis-details__summary .label {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+  }
+
+  .analysis-details__summary .value {
+    margin: 2px 0 0 0;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  .analysis-details__section {
+    margin-top: 16px;
+  }
+
+  .analysis-details__section h4 {
+    margin: 0 0 8px 0;
+    color: var(--text-primary);
+  }
+
+  .eyebrow {
+    margin: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+  }
+
+  .toggle-btn {
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  .toggle-btn:hover {
+    background: var(--bg-tertiary);
+  }
+
+  .issue-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .issue {
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+  }
+
+  .issue.fail {
+    border-color: #ef4444;
+  }
+
+  .issue.warn {
+    border-color: #f59e0b;
+  }
+
+  .issue-label {
+    display: block;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .issue-detail {
+    display: block;
+    color: var(--text-secondary);
+    margin-top: 4px;
+  }
+
+  .checks-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 10px;
+  }
+
+  .check-row {
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+  }
+
+  .check-row.warn {
+    border-color: #f59e0b;
+  }
+
+  .check-row.fail {
+    border-color: #ef4444;
+  }
+
+  .check-title {
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .check-detail {
+    color: var(--text-secondary);
+    margin-top: 4px;
+  }
+
+  .redirect-path {
+    margin: 0 0 8px 0;
+    color: var(--text-secondary);
+    word-break: break-all;
+  }
+
+  .redirect-list {
+    margin: 0;
+    padding-left: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .redirect-index {
+    display: inline-block;
+    min-width: 60px;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  .redirect-url {
+    display: inline-block;
+    word-break: break-all;
+    color: var(--text-primary);
+    margin-left: 6px;
   }
 
   .risk-issue {
@@ -2924,55 +3192,6 @@
     color: var(--text-primary);
   }
 
-  .chevron {
-    font-size: 1rem;
-    color: var(--text-secondary);
-    transition: transform 0.2s ease;
-  }
-
-  details[open] .chevron {
-    transform: rotate(180deg);
-  }
-
-  .drawer-chevron {
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-    transition: transform 0.2s ease;
-    margin-left: auto;
-  }
-
-  details[open] .drawer-chevron {
-    transform: rotate(90deg);
-  }
-
-  
-  
-  .drawer summary {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    cursor: pointer;
-    list-style: none;
-    user-select: none;
-    padding: 12px 16px;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 8px;
-    margin-bottom: 8px;
-    transition: background-color 0.2s ease;
-  }
-
-  .drawer summary:hover {
-    background: rgba(255, 255, 255, 0.1);
-  }
-
-  .drawer summary::-webkit-details-marker {
-    display: none;
-  }
-
-  .drawer summary::marker {
-    display: none;
-  }
-
   .breakdown-subtitle {
     font-size: 0.8rem;
     color: var(--text-secondary);
@@ -3050,30 +3269,6 @@
     color: var(--text-secondary);
     margin-bottom: 8px;
     line-height: 1.4;
-  }
-
-  .result-warning {
-    background: #7f1d1d;
-    padding: 8px;
-    border-radius: 4px;
-    border-left: 3px solid #ef4444;
-    margin-bottom: 8px;
-  }
-
-  .result-warning strong {
-    color: #fca5a5;
-    display: block;
-    margin-bottom: 4px;
-  }
-
-  .result-warning .learn-more-btn {
-    color: #fca5a5;
-    border-color: #991b1b;
-  }
-
-  .result-warning .learn-more-btn:hover {
-    background: #991b1b;
-    color: #ffffff;
   }
 
   .result-success {
@@ -3182,56 +3377,6 @@
     margin: 0 0 16px 0;
     color: var(--text-secondary);
     line-height: 1.5;
-  }
-
-  .analysis-highlights,
-  .security-tips,
-  .analysis-metrics {
-    margin: 16px 0;
-  }
-
-  .analysis-highlights h5,
-  .security-tips h5,
-  .analysis-metrics h5 {
-    margin: 0 0 8px 0;
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: var(--text-primary);
-  }
-
-  .analysis-highlights ul,
-  .security-tips ul {
-    margin: 0;
-    padding-left: 20px;
-    color: var(--text-secondary);
-  }
-
-  .analysis-highlights li,
-  .security-tips li {
-    margin-bottom: 4px;
-    line-height: 1.4;
-  }
-
-  .metrics-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-    gap: 12px;
-  }
-
-  .metric {
-    background: var(--bg-primary);
-    padding: 12px;
-    border-radius: 6px;
-    text-align: center;
-    border: 1px solid var(--border-color);
-  }
-
-  .metric-value {
-    display: block;
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 4px;
   }
 
   /* Enhanced risk score display */
