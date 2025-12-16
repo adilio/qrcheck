@@ -1607,6 +1607,7 @@
           tier3Checks={tier3Checks}
         />
       {/if}
+    </section>
   {:else if flow === 'processing'}
     <!-- Enhanced Progress Section -->
     <section class="analysis-progress" class:active={showProgressSection} aria-live="polite" on:click={handleClickOutside}>
