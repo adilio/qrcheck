@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { fade, slide } from 'svelte/transition';
-  import { cubicOut } from 'svelte/easing';
+  // Transitions removed due to CSP violations causing crashes
+  // import { fade, slide } from 'svelte/transition';
+  // import { cubicOut } from 'svelte/easing';
 
   export let verdict: 'safe' | 'caution' | 'danger' | 'analyzing';
   export let finalUrl: string = '';
@@ -52,7 +53,7 @@
   $: showSpinner = verdict === 'analyzing' || !tier1Complete;
 </script>
 
-<div class="results-card" transition:fade={{ duration: 200 }}>
+<div class="results-card">
   <!-- Verdict Banner -->
   <div
     class="verdict-banner"
@@ -65,7 +66,7 @@
         <div class="verdict-message">{config.message}</div>
       </div>
       {#if showSpinner}
-        <div class="spinner" transition:fade={{ duration: 150 }}>
+        <div class="spinner">
           <div class="spinner-circle"></div>
         </div>
       {/if}
@@ -74,14 +75,13 @@
 
   <!-- Redirect Chain (if applicable) -->
   {#if redirectChain.length > 1}
-    <div class="section redirect-section" transition:slide={{ duration: 300, easing: cubicOut }}>
+    <div class="section redirect-section">
       <h4 class="section-title">📍 Final Destination</h4>
       <div class="redirect-tree">
         {#each redirectChain as hop, i}
           <div
             class="redirect-hop"
             style="padding-left: {i * 16}px"
-            transition:fade={{ duration: 200, delay: i * 50 }}
           >
             {#if i === redirectChain.length - 1}
               <span class="hop-icon">└→</span>
@@ -99,7 +99,7 @@
 
   <!-- Tier 1: Quick Checks (Instant) -->
   {#if tier1Complete}
-    <div class="section" transition:slide={{ duration: 300, easing: cubicOut }}>
+    <div class="section">
       <h4 class="section-title">
         ⚡ Quick Checks
         <span class="status-badge {tier1Checks.every(c => c.status === 'pass') ? 'pass' : 'warn'}">
@@ -126,7 +126,7 @@
 
   <!-- Tier 2: Fast Checks (Cached) -->
   {#if tier1Complete}
-    <div class="section" transition:slide={{ duration: 300, easing: cubicOut, delay: 100 }}>
+    <div class="section">
       <h4 class="section-title">
         🗄️ Cached Intelligence
         {#if tier2Complete}
@@ -163,7 +163,7 @@
 
   <!-- Tier 3: Threat Intelligence (API Checks) -->
   {#if tier2Complete}
-    <div class="section" transition:slide={{ duration: 300, easing: cubicOut, delay: 100 }}>
+    <div class="section">
       <h4 class="section-title">
         🛡️ Threat Intelligence
         {#if tier3Complete}
@@ -200,7 +200,7 @@
 
   <!-- Analysis Complete Badge -->
   {#if allChecksComplete}
-    <div class="complete-badge" transition:fade={{ duration: 300, delay: 200 }}>
+    <div class="complete-badge">
       ✅ Analysis Complete
     </div>
   {/if}
