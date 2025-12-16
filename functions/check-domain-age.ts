@@ -12,15 +12,25 @@ export const handler: Handler = async (event) => {
       return { statusCode: 400, body: JSON.stringify({ error: 'Missing domain' }) };
     }
 
-    // Use free WHOIS API (whoisjson.com) - no API key required
-    const response = await fetch(`https://whoisjson.com/api/v1/whois?domain=${domain}`);
+    // Use RDAP - public, no API key required
+    const rdapUrl = `https://rdap.org/domain/${encodeURIComponent(domain)}`;
+    const response = await fetch(rdapUrl, {
+      headers: { Accept: 'application/rdap+json' }
+    });
 
     if (!response.ok) {
-      throw new Error('WHOIS lookup failed');
+      throw new Error(`RDAP lookup failed with status ${response.status}`);
     }
 
     const data = await response.json();
-    const createdDate = data.WhoisRecord?.createdDate || data.created;
+
+    // RDAP events array typically includes a registration/creation entry with eventDate
+    const events: any[] = Array.isArray(data.events) ? data.events : [];
+    const creationEvent = events.find((event: any) =>
+      typeof event?.eventAction === 'string' &&
+      ['registration', 'creation', 'registered'].includes(event.eventAction.toLowerCase())
+    );
+    const createdDate = creationEvent?.eventDate || data?.registrationDate || data?.created;
 
     if (!createdDate) {
       return {

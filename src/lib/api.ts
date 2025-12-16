@@ -254,7 +254,7 @@ async function resolveChainLocally(url: string): Promise<ResolveResponse> {
 export async function intel(url: string): Promise<IntelResponse> {
   try {
     // First try the live API lookup
-    const response = await fetch('/api/intel/urlhaus', {
+    const response = await fetch('/.netlify/functions/intel-urlhaus', {
       method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'application/json' },
       body: JSON.stringify({ url })
