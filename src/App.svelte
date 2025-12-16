@@ -703,11 +703,17 @@
         }
 
         if (tieredResult.tier2) {
+          console.log('✅ Tier 2 complete, checks:', checks.tier2);
           tier2Checks = checks.tier2;
           tier2Complete = true;
         }
 
         if (tieredResult.tier3) {
+          console.log('✅ Tier 3 complete, checks:', checks.tier3);
+          console.log('Tier 3 result details:', {
+            domainAge: latestResult.details?.domainAge,
+            enhancedThreatIntel: latestResult.details?.enhancedThreatIntel
+          });
           tier3Checks = checks.tier3;
           tier3Complete = true;
         }

@@ -319,8 +319,10 @@ export async function analyzeTier3(content: QRContent, tier2Result: HeuristicRes
 
   // Parallel threat intelligence checks
   try {
+    console.log('🔍 Tier 3: Starting threat intelligence checks for:', url);
     const { checkAllThreatIntel } = await import('./api');
     const intelResults = await checkAllThreatIntel(url);
+    console.log('🔍 Tier 3: Received intel results:', intelResults);
 
     // Process domain age results - always add to details for UI display
     if (intelResults.domainAge) {
@@ -364,7 +366,7 @@ export async function analyzeTier3(content: QRContent, tier2Result: HeuristicRes
     }
   } catch (e) {
     // API calls failed - add default values so UI shows checks completed
-    console.warn('Tier 3 analysis failed:', e);
+    console.error('❌ Tier 3 analysis failed:', e);
     result.details.domainAge = {
       age_days: null,
       risk_points: 0,
@@ -378,6 +380,11 @@ export async function analyzeTier3(content: QRContent, tier2Result: HeuristicRes
       sources_checked: []
     };
   }
+
+  console.log('🔍 Tier 3: Final result.details:', {
+    domainAge: result.details.domainAge,
+    enhancedThreatIntel: result.details.enhancedThreatIntel
+  });
 
   // Final risk calculation
   if (result.score >= 70) {
