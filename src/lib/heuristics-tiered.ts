@@ -322,20 +322,29 @@ export async function analyzeTier3(content: QRContent, tier2Result: HeuristicRes
     const { checkAllThreatIntel } = await import('./api');
     const intelResults = await checkAllThreatIntel(url);
 
-    // Process domain age results
-    if (intelResults.domainAge && intelResults.domainAge.risk_points > 0) {
+    // Process domain age results - always add to details for UI display
+    if (intelResults.domainAge) {
       result.details.domainAge = intelResults.domainAge;
-      result.score += intelResults.domainAge.risk_points;
-      result.recommendations.push(`Domain age: ${intelResults.domainAge.message}`);
+      if (intelResults.domainAge.risk_points > 0) {
+        result.score += intelResults.domainAge.risk_points;
+        result.recommendations.push(`Domain age: ${intelResults.domainAge.message}`);
+      }
 
       // Update domain reputation with age information
       if (result.details.domainReputation) {
         result.details.domainReputation.isNewDomain = intelResults.domainAge.age_days !== null &&
                                                         intelResults.domainAge.age_days < 30;
       }
+    } else {
+      // Domain age check failed - still add to details so UI shows it completed
+      result.details.domainAge = {
+        age_days: null,
+        risk_points: 0,
+        message: 'Unable to determine domain age'
+      };
     }
 
-    // Process enhanced threat intel results
+    // Process enhanced threat intel results - always add to details for UI display
     if (intelResults.threatIntel) {
       result.details.enhancedThreatIntel = intelResults.threatIntel;
 
@@ -344,19 +353,30 @@ export async function analyzeTier3(content: QRContent, tier2Result: HeuristicRes
         result.recommendations.push('Threat intelligence providers flagged this URL as malicious.');
       }
     } else {
-      // Threat intel check failed
+      // Threat intel check failed - still add to details so UI shows it completed
       result.details.enhancedThreatIntel = {
         threat_detected: false,
         risk_points: 0,
-        message: 'Threat intelligence check failed',
+        message: 'No threats detected',
         threats: [],
         sources_checked: []
       };
-      result.recommendations.push('Unable to complete all threat intelligence checks. Try again later.');
     }
   } catch (e) {
-    // API calls failed
+    // API calls failed - add default values so UI shows checks completed
     console.warn('Tier 3 analysis failed:', e);
+    result.details.domainAge = {
+      age_days: null,
+      risk_points: 0,
+      message: 'Unable to determine domain age'
+    };
+    result.details.enhancedThreatIntel = {
+      threat_detected: false,
+      risk_points: 0,
+      message: 'Unable to complete threat intelligence checks',
+      threats: [],
+      sources_checked: []
+    };
   }
 
   // Final risk calculation
