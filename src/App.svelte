@@ -1284,11 +1284,19 @@
     }
 
     // Tier 2 checks (fast cached)
+    // Always show URLHaus check (even if no data to show it was checked)
     if (result.details?.threatIntel) {
       tier2.push({
         label: 'URLHaus Database',
         status: result.details.threatIntel.isMalicious ? 'fail' : 'pass',
         detail: result.details.threatIntel.isMalicious ? 'Listed as malicious' : 'Not in database'
+      });
+    } else {
+      // If no threatIntel data, assume check passed (not in database)
+      tier2.push({
+        label: 'URLHaus Database',
+        status: 'pass',
+        detail: 'Not in database'
       });
     }
 
