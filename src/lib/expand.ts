@@ -64,6 +64,8 @@ async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit, tim
 
 export interface ExpandOptions {
   bypassCache?: boolean;
+  maxHops?: number;
+  timeout?: number;
 }
 
 export async function expandUrl(originalUrl: string, options: ExpandOptions = {}): Promise<RedirectExpansion> {
@@ -106,8 +108,11 @@ export async function expandUrl(originalUrl: string, options: ExpandOptions = {}
   const start = Date.now();
   let reason: ExpansionFailureReason | undefined;
 
-  while (hops < MAX_HOPS) {
-    if (Date.now() - start > TOTAL_TIMEOUT_MS) {
+  const maxHops = options.maxHops ?? MAX_HOPS;
+  const totalTimeout = options.timeout ?? TOTAL_TIMEOUT_MS;
+
+  while (hops < maxHops) {
+    if (Date.now() - start > totalTimeout) {
       reason = 'timeout';
       break;
     }
@@ -199,7 +204,7 @@ export async function expandUrl(originalUrl: string, options: ExpandOptions = {}
     hops += 1;
   }
 
-  if (hops >= MAX_HOPS) {
+  if (hops >= maxHops) {
     reason = 'too_many_redirects';
   }
 
@@ -216,4 +221,33 @@ export async function expandUrl(originalUrl: string, options: ExpandOptions = {}
   }
 
   return result;
+}
+
+/**
+ * Expand only the first hop of a URL redirect chain
+ * This provides instant feedback for URL shorteners (most important hop)
+ * with a quick 1-second timeout.
+ *
+ * @param url - The URL to expand
+ * @returns Redirect expansion with first hop only
+ */
+export async function expandFirstHop(url: string): Promise<RedirectExpansion> {
+  return expandUrl(url, {
+    maxHops: 1,
+    timeout: 1000 // 1 second timeout for first hop
+  });
+}
+
+/**
+ * Expand the full redirect chain in the background
+ * This continues the expansion after the first hop has been shown to the user.
+ *
+ * @param url - The URL to expand
+ * @returns Complete redirect expansion
+ */
+export async function expandFullChain(url: string): Promise<RedirectExpansion> {
+  return expandUrl(url, {
+    maxHops: MAX_HOPS,
+    timeout: TOTAL_TIMEOUT_MS
+  });
 }

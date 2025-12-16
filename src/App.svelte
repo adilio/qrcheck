@@ -10,7 +10,9 @@
     type FormattedIntelSource,
     type FormattedHeuristicCheck
   } from './lib/heuristics';
+  import { analyzeHeuristicsTiered, type TieredHeuristicResult } from './lib/heuristics-tiered';
   import { resolveChain, intel, type IntelResponse } from './lib/api';
+  import { expandFirstHop, expandFullChain } from './lib/expand';
     import { startCamera, stopCamera } from './lib/camera';
 
   type VerdictKey = 'SAFE' | 'WARN' | 'BLOCK';
@@ -649,15 +651,35 @@
   async function runHeuristicsAnalysis(content: QRContent, intel?: IntelResponse) {
     step = 'Analysing locally…';
 
-    // Execute heuristic analysis steps
-    await executeAnalysisStep('heuristics-length');
-    await executeAnalysisStep('heuristics-obfuscation');
-    await executeAnalysisStep('heuristics-tld');
-    await executeAnalysisStep('heuristics-keywords');
-    await executeAnalysisStep('domain-age');
+    // Use progressive tiered analysis for instant feedback
+    const progressiveAnalysis = analyzeHeuristicsTiered(content);
 
-    heuristicsResult = await analyzeHeuristics(content, intel);
-    formattedHeuristics = formatHeuristicResults(heuristicsResult);
+    for await (const tieredResult of progressiveAnalysis) {
+      // Update heuristics result with latest tier
+      const latestResult = tieredResult.tier3 || tieredResult.tier2 || tieredResult.tier1;
+
+      if (latestResult) {
+        heuristicsResult = latestResult;
+        formattedHeuristics = formatHeuristicResults(latestResult);
+      }
+
+      // Execute analysis steps progressively based on tier
+      if (tieredResult.tier1 && !tieredResult.tier2) {
+        // Tier 1 complete
+        await executeAnalysisStep('heuristics-length');
+        await executeAnalysisStep('heuristics-obfuscation');
+        await executeAnalysisStep('heuristics-tld');
+        await executeAnalysisStep('heuristics-keywords');
+      } else if (tieredResult.tier2 && !tieredResult.tier3) {
+        // Tier 2 complete - no additional steps needed
+      } else if (tieredResult.tier3) {
+        // Tier 3 complete
+        await executeAnalysisStep('domain-age');
+      }
+
+      // Force UI update
+      await tick();
+    }
   }
 
   async function runUrlAnalysis(raw: string) {
@@ -671,21 +693,31 @@
       const knownShorteners = ['bit.ly', 'tinyurl.com', 't.co', 'qrco.de', 'buff.ly', 'goo.gl', 'ow.ly', 'tiny.cc'];
       const isKnownShortener = knownShorteners.some(shortener => domain.includes(shortener));
 
-      // Use resolveChain for better CORS handling with known shorteners
-      const redirectResult = await resolveChain(raw);
-      hops = redirectResult.hops;
-      urlText = redirectResult.final; // Update urlText to the final URL
-
-      // Check if redirect expansion was blocked (only one hop means no expansion happened)
+      // Progressive redirect expansion: show first hop immediately
+      const firstHopResult = await expandFirstHop(raw);
+      hops = firstHopResult.chain;
+      urlText = firstHopResult.finalUrl;
       redirectExpansionBlocked = isKnownShortener && hops.length === 1;
+
+      // Force UI update to show first hop immediately
+      await tick();
+
+      // Continue expanding full chain in background (non-blocking)
+      expandFullChain(raw).then(fullResult => {
+        hops = fullResult.chain;
+        urlText = fullResult.finalUrl;
+        redirectExpansionBlocked = isKnownShortener && fullResult.chain.length === 1;
+      }).catch(err => {
+        console.warn('Full redirect chain expansion failed:', err);
+      });
 
       // Execute threat intelligence steps
       await executeAnalysisStep('threat-intel-google');
       await executeAnalysisStep('threat-intel-abuseipdb');
       await executeAnalysisStep('threat-intel-urlhaus');
 
-      // Run the actual threat intelligence check
-      intelRes = await intel(redirectResult.final || raw);
+      // Run the actual threat intelligence check on the first hop result
+      intelRes = await intel(firstHopResult.finalUrl || raw);
 
       flow = 'complete';
       // Only auto-expand checks if there are actual issues found

@@ -245,66 +245,40 @@ export async function analyzeHeuristics(content: QRContent, threatIntel?: any): 
     addRecommendation(`Contains suspicious words: ${result.details.enhancedKeywords.matches.map(m => m.word).join(', ')}`);
   }
 
-  // NEW: Domain age check (Netlify Function)
+  // NEW: Parallel threat intelligence checks (Domain age + Enhanced threat intel)
+  // Execute both API calls in parallel for better performance
   try {
-    const urlObj = new URL(url);
-    const domain = urlObj.hostname;
+    const { checkAllThreatIntel } = await import('./api');
+    const intelResults = await checkAllThreatIntel(url);
 
-    const domainAgeCheck = await fetch('/.netlify/functions/check-domain-age', {
-      method: 'POST',
-      body: JSON.stringify({ domain }),
-      headers: { 'Content-Type': 'application/json' }
-    }).then(r => r.json());
+    // Process domain age results
+    if (intelResults.domainAge && intelResults.domainAge.risk_points > 0) {
+      result.details.domainAge = intelResults.domainAge;
+      result.score += intelResults.domainAge.risk_points;
+      addRecommendation(`Domain age: ${intelResults.domainAge.message}`);
+    }
 
-    if (domainAgeCheck.risk_points > 0) {
-      result.details.domainAge = {
-        age_days: domainAgeCheck.age_days,
-        risk_points: domainAgeCheck.risk_points,
-        message: domainAgeCheck.message
+    // Process enhanced threat intel results
+    if (intelResults.threatIntel) {
+      result.details.enhancedThreatIntel = intelResults.threatIntel;
+
+      if (intelResults.threatIntel.threat_detected) {
+        result.score += intelResults.threatIntel.risk_points;
+        addRecommendation('Threat intelligence providers flagged this URL as malicious.');
+      }
+    } else {
+      // Threat intel check failed, set fallback values
+      result.details.enhancedThreatIntel = {
+        threat_detected: false,
+        risk_points: 0,
+        message: 'Threat intelligence check failed',
+        threats: [],
+        sources_checked: []
       };
-      result.score += domainAgeCheck.risk_points;
-      addRecommendation(`Domain age: ${domainAgeCheck.message}`);
+      addRecommendation('Unable to complete all threat intelligence checks. Try again later.');
     }
   } catch (e) {
-    // Domain age check failed, continue without it
-  }
-
-  // NEW: Enhanced threat intelligence check (Netlify Function)
-  try {
-    const urlObj = new URL(url);
-    const domain = urlObj.hostname;
-
-    const threatIntelCheck = await fetch('/.netlify/functions/check-threat-intel', {
-      method: 'POST',
-      body: JSON.stringify({ domain, url }),
-      headers: { 'Content-Type': 'application/json' }
-    }).then(r => r.json());
-
-    const normalizedThreats = Array.isArray(threatIntelCheck.threats)
-      ? threatIntelCheck.threats.map((item: any) => ({
-          source: String(item.source || item?.name || 'Unknown provider'),
-          details: String(item.details || item?.message || 'Reported a potential threat'),
-          score: typeof item.score === 'number' ? item.score : 0
-        }))
-      : [];
-
-    const normalizedSources = Array.isArray(threatIntelCheck.sources_checked)
-      ? threatIntelCheck.sources_checked.map((source: any) => String(source))
-      : [];
-
-    result.details.enhancedThreatIntel = {
-      threat_detected: Boolean(threatIntelCheck.threat_detected),
-      risk_points: Number(threatIntelCheck.risk_points) || 0,
-      message: threatIntelCheck.message || (threatIntelCheck.threat_detected ? 'Threats detected' : 'No threats detected'),
-      threats: normalizedThreats,
-      sources_checked: normalizedSources
-    };
-
-    if (result.details.enhancedThreatIntel.threat_detected) {
-      result.score += result.details.enhancedThreatIntel.risk_points;
-      addRecommendation('Threat intelligence providers flagged this URL as malicious.');
-    }
-  } catch (e) {
+    // Both checks failed, set fallback values
     result.details.enhancedThreatIntel = {
       threat_detected: false,
       risk_points: 0,

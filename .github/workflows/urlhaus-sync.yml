@@ -1,7 +1,7 @@
-name: Sync URLHaus hosts
+name: Sync URLHaus hosts (DISABLED - now handled at build time)
 on:
-  schedule:
-    - cron: "23 2 * * *"
+  # Disabled: Data is now fetched at build time via scripts/prebuild.mjs
+  # This workflow is kept for reference but will not run
   workflow_dispatch:
 
 jobs:

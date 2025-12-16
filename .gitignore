@@ -10,6 +10,10 @@ dist
 # Local Netlify folder
 .netlify
 
+# Generated data files (fetched at build time)
+public/urlhaus/hosts.json
+public/shorteners.json
+
 # Agent documentation
 AGENTS.md
 

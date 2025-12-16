@@ -292,3 +292,118 @@ export async function intel(url: string): Promise<IntelResponse> {
     return { urlhaus: null };
   }
 }
+
+/**
+ * Domain age check result
+ */
+export interface DomainAgeResult {
+  age_days: number | null;
+  risk_points: number;
+  message: string;
+}
+
+/**
+ * Enhanced threat intelligence result
+ */
+export interface ThreatIntelResult {
+  threat_detected: boolean;
+  risk_points: number;
+  message: string;
+  threats: Array<{ source: string; details: string; score: number }>;
+  sources_checked: string[];
+}
+
+/**
+ * Combined threat intelligence results from all sources
+ */
+export interface AllThreatIntelResults {
+  domainAge: DomainAgeResult | null;
+  threatIntel: ThreatIntelResult | null;
+}
+
+/**
+ * Check domain age via Netlify Function
+ */
+async function checkDomainAge(domain: string): Promise<DomainAgeResult> {
+  const response = await fetch('/.netlify/functions/check-domain-age', {
+    method: 'POST',
+    body: JSON.stringify({ domain }),
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Domain age check failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Check enhanced threat intelligence via Netlify Function
+ */
+async function checkThreatIntel(domain: string, url: string): Promise<ThreatIntelResult> {
+  const response = await fetch('/.netlify/functions/check-threat-intel', {
+    method: 'POST',
+    body: JSON.stringify({ domain, url }),
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Threat intel check failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+
+  // Normalize the response structure
+  const normalizedThreats = Array.isArray(data.threats)
+    ? data.threats.map((item: any) => ({
+        source: String(item.source || item?.name || 'Unknown provider'),
+        details: String(item.details || item?.message || 'Reported a potential threat'),
+        score: typeof item.score === 'number' ? item.score : 0
+      }))
+    : [];
+
+  const normalizedSources = Array.isArray(data.sources_checked)
+    ? data.sources_checked.map((source: any) => String(source))
+    : [];
+
+  return {
+    threat_detected: Boolean(data.threat_detected),
+    risk_points: Number(data.risk_points) || 0,
+    message: data.message || (data.threat_detected ? 'Threats detected' : 'No threats detected'),
+    threats: normalizedThreats,
+    sources_checked: normalizedSources
+  };
+}
+
+/**
+ * Check all threat intelligence sources in parallel
+ * This dramatically improves performance by executing API calls concurrently
+ * instead of sequentially.
+ *
+ * @param url - The URL to check
+ * @returns Results from all threat intelligence sources (null if failed)
+ */
+export async function checkAllThreatIntel(url: string): Promise<AllThreatIntelResults> {
+  try {
+    const urlObj = new URL(url);
+    const domain = urlObj.hostname;
+
+    // Execute both API calls in parallel
+    const results = await Promise.allSettled([
+      checkDomainAge(domain),
+      checkThreatIntel(domain, url)
+    ]);
+
+    return {
+      domainAge: results[0].status === 'fulfilled' ? results[0].value : null,
+      threatIntel: results[1].status === 'fulfilled' ? results[1].value : null
+    };
+  } catch (error) {
+    console.warn('Parallel threat intel check failed:', error);
+    return {
+      domainAge: null,
+      threatIntel: null
+    };
+  }
+}
