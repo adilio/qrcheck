@@ -107,7 +107,7 @@
         </span>
       </h4>
       <div class="checks-list">
-        {#each tier1Checks as check, i}
+        {#each tier1Checks as check, i (check.label + check.status)}
           <div
             class="check-item {check.status}"
             transition:fade={{ duration: 200, delay: i * 30 }}
@@ -139,7 +139,7 @@
         {/if}
       </h4>
       <div class="checks-list">
-        {#each tier2Checks as check, i}
+        {#each tier2Checks as check, i (check.label + check.status)}
           <div
             class="check-item {check.status}"
             transition:fade={{ duration: 200, delay: tier2Complete ? i * 30 : 0 }}
@@ -177,7 +177,7 @@
         {/if}
       </h4>
       <div class="checks-list">
-        {#each tier3Checks as check, i}
+        {#each tier3Checks as check, i (check.label + check.status)}
           <div
             class="check-item {check.status}"
             transition:fade={{ duration: 200, delay: tier3Complete ? i * 30 : 0 }}
