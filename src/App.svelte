@@ -1877,7 +1877,7 @@
 
     <footer>
       <div class="footer-content">
-        <p>Your privacy matters. All scans are processed locally.</p>
+        <p>Your privacy matters. No tracking or user data collected.</p>
         <div class="footer-links">
           <a href="https://github.com/adilio/qrcheck" target="_blank" rel="noopener noreferrer" class="footer-link">
             View on GitHub
