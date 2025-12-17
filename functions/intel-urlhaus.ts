@@ -1,6 +1,8 @@
 import type { Handler } from "@netlify/functions";
 
-const UA = "QRCheck-Intel/1.0 (+https://qrcheck.ca)";
+// Use a mainstream browser UA to avoid URLHaus "verify user agent" redirects that break POST lookups
+const UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 QRCheck/Intel";
 const URLHAUS_URL = "https://urlhaus.abuse.ch/api/v1/url/";
 const URLHAUS_HOST = "https://urlhaus.abuse.ch/api/v1/host/";
 const TIMEOUT_MS = 4500;
@@ -14,14 +16,20 @@ function normalizeHost(u: string): string | null {
 }
 
 async function postForm(endpoint: string, form: Record<string, string>, signal: AbortSignal) {
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded", "user-agent": UA },
-    body: new URLSearchParams(form).toString(),
-    signal
-  });
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded", "user-agent": UA },
+      body: new URLSearchParams(form).toString(),
+      redirect: "follow",
+      signal
+    });
 
-  if (!res.ok) {
+    // URLHaus occasionally responds with a 307 to a "verify user agent" page; treat that as a soft miss
+    if (res.status >= 300 && res.status < 400) {
+      return { query_status: "no_results", urls: [], records: [] };
+    }
+
+    if (!res.ok) {
     throw new Error(`HTTP ${res.status}: ${res.statusText}`);
   }
 
