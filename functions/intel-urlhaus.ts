@@ -29,11 +29,17 @@ async function postForm(endpoint: string, form: Record<string, string>, signal: 
       return { query_status: "no_results", urls: [], records: [] };
     }
 
-    if (!res.ok) {
+  if (!res.ok) {
     throw new Error(`HTTP ${res.status}: ${res.statusText}`);
   }
 
   const text = await res.text();
+
+  // URLHaus sometimes replies with a plain "no" body after verify-ua; treat as no results instead of an error
+  if (text.trim().toLowerCase() === "no") {
+    return { query_status: "no_results", urls: [], records: [] };
+  }
+
   try {
     return JSON.parse(text);
   } catch (e) {
