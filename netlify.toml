@@ -44,4 +44,4 @@
     Permissions-Policy = "camera=*, clipboard-read=(self)"
     Cross-Origin-Opener-Policy = "same-origin"
     Cross-Origin-Embedder-Policy = "require-corp"
-    Content-Security-Policy = "default-src 'self'; connect-src 'self'; img-src 'self' data:; script-src 'self' 'sha256-MS6INY5qh1wTOlL0Hw2t16kj7OWmB7LfG3D69PyDy+U=';"
+    Content-Security-Policy = "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'sha256-MS6INY5qh1wTOlL0Hw2t16kj7OWmB7LfG3D69PyDy+U=';"
