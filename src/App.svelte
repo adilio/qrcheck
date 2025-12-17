@@ -1877,7 +1877,10 @@
 
     <footer>
       <div class="footer-content">
-        <p>Your privacy matters. No tracking or user data collected.</p>
+        <div class="footer-privacy">
+          <p class="footer-privacy-line">Your privacy matters.</p>
+          <p class="footer-privacy-line">No tracking or user data collected.</p>
+        </div>
         <div class="footer-links">
           <a href="https://github.com/adilio/qrcheck" target="_blank" rel="noopener noreferrer" class="footer-link">
             View on GitHub
@@ -1942,7 +1945,28 @@
     font-family: monospace;
     color: var(--text-secondary);
   }
-  
+
+  .footer-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: center;
+    text-align: center;
+  }
+
+  .footer-privacy-line {
+    margin: 0;
+    color: var(--text-secondary);
+  }
+
+  .footer-links {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
   .risk-issues {
     list-style: none;
     padding: 0;
