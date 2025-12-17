@@ -652,6 +652,7 @@
       if (latestResult) {
         heuristicsResult = latestResult;
         formattedHeuristics = formatHeuristicResults(latestResult);
+        detailsOpen = true;
 
         // Build check lists from results
         const checks = buildProgressiveChecks(latestResult);
