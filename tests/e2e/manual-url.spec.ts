@@ -4,7 +4,7 @@ test('camera scan flow', async ({ page }) => {
   await page.goto('/');
 
   // Check that camera button exists and is clickable
-  const cameraButton = page.getByRole('button', { name: '📷 Camera' });
+  const cameraButton = page.getByRole('button', { name: 'Camera' });
   await expect(cameraButton).toBeVisible();
 
   // Start camera scan

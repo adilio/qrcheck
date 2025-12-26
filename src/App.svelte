@@ -15,6 +15,11 @@
   import { expandFirstHop, expandFullChain } from './lib/expand';
   import { startCamera, stopCamera } from './lib/camera';
   import ResultsCard from './components/ResultsCard.svelte';
+  import OfflineIndicator from './components/OfflineIndicator.svelte';
+  import UpdatePrompt from './components/UpdatePrompt.svelte';
+  import InstallPrompt from './components/InstallPrompt.svelte';
+  import { handleShareTarget } from './lib/share-handler';
+  import { triggerInstallPromptAfterScan } from './lib/install-prompt';
 
   type VerdictKey = 'SAFE' | 'WARN' | 'BLOCK';
   type IntelStatus = 'clean' | 'warn' | 'block' | 'info' | 'error';
@@ -219,6 +224,13 @@
 
     // Initialize floating particles
     initializeParticles();
+
+    // Handle share target (incoming shared URLs)
+    const sharedUrl = handleShareTarget();
+    if (sharedUrl) {
+      manualUrl = sharedUrl;
+      handleManualUrlSubmit();
+    }
   });
 
   onDestroy(() => {
@@ -238,7 +250,14 @@
     theme = theme === 'dark' ? 'light' : 'dark';
   }
 
-  
+  function trackScanAndPromptInstall() {
+    if (typeof window === 'undefined') return;
+    const scanCount = parseInt(localStorage.getItem('scanCount') || '0') + 1;
+    localStorage.setItem('scanCount', scanCount.toString());
+    triggerInstallPromptAfterScan();
+  }
+
+
   function buildAlerts(): Alert[] {
     const items: Alert[] = [];
     if (cameraError) {
@@ -619,6 +638,7 @@
         // Run heuristics analysis for non-URL content
         await runHeuristicsAnalysis(qrContent);
         flow = 'complete';
+        trackScanAndPromptInstall();
       }
     } catch (err: any) {
       flow = 'error';
@@ -738,6 +758,7 @@
       intelRes = await intel(redirectResult.final || raw);
 
       flow = 'complete';
+      trackScanAndPromptInstall();
     } finally {
       step = '';
       showProgressSection = false; // Hide progress section when complete
@@ -1381,6 +1402,8 @@
   </script>
 
 <main class="page" on:paste={handlePasteEvent}>
+  <OfflineIndicator />
+
   <!-- Floating particles background -->
   <div class="particle-container" id="particleContainer"></div>
 
@@ -1893,6 +1916,9 @@
       </div>
     </footer>
   </div>
+
+  <UpdatePrompt />
+  <InstallPrompt />
 </main>
 
 <style>
