@@ -114,6 +114,28 @@ QRCheck integrates multiple threat intelligence sources with smart fallbacks:
 
 *Note: Tier 3 is optional. The tool provides comprehensive analysis with Tier 1 & 2 checks alone.*
 
+## Progressive Web App (PWA)
+
+QRCheck is a full Progressive Web App—install it on your device for an app-like experience:
+
+### Features
+- **Install to Home Screen** — Add QRCheck to your phone or desktop for quick access
+- **Offline Support** — Tier 1 + Tier 2 checks work without internet connection
+- **Share Target** — Share URLs from other apps directly to QRCheck (Android/Chrome)
+- **App Shortcuts** — Quick actions from home screen icon
+- **Auto-Updates** — Get notified when a new version is available
+
+### How to Install
+- **Android/Chrome**: Tap the install prompt after your first scan, or use browser menu → "Add to Home Screen"
+- **iOS Safari**: Tap Share → "Add to Home Screen"
+- **Desktop Chrome/Edge**: Click install icon in address bar
+
+### Offline Capabilities
+When offline, QRCheck still provides comprehensive analysis:
+- **Tier 1 (Always Available)**: URL parsing, TLD checks, keyword detection, typosquatting, homograph detection
+- **Tier 2 (Cached)**: URLHaus data and shortener detection from last sync
+- **Tier 3 (Online Only)**: Google Safe Browsing, AbuseIPDB require network
+
 ## Privacy First
 
 Your privacy matters. No tracking or user data collected.
@@ -209,7 +231,10 @@ qrcheck/
 │   ├── main.ts                     # Application entry point
 │   ├── types.ts                    # TypeScript type definitions
 │   ├── components/
-│   │   └── ResultsCard.svelte      # Progressive results display
+│   │   ├── ResultsCard.svelte      # Progressive results display
+│   │   ├── OfflineIndicator.svelte # Offline mode banner
+│   │   ├── UpdatePrompt.svelte     # PWA update notification
+│   │   └── InstallPrompt.svelte    # PWA install prompt
 │   ├── lib/
 │   │   ├── decode.ts               # QR code decoding & content parsing
 │   │   ├── heuristics.ts           # Main heuristic analysis engine
@@ -218,7 +243,11 @@ qrcheck/
 │   │   ├── expand.ts               # Redirect chain expansion
 │   │   ├── cache.ts                # IndexedDB caching layer
 │   │   ├── camera.ts               # Camera access & QR scanning
-│   │   └── api.ts                  # Netlify Function integration
+│   │   ├── api.ts                  # Netlify Function integration
+│   │   ├── pwa.ts                  # Service worker registration
+│   │   ├── network-status.ts       # Online/offline detection
+│   │   ├── install-prompt.ts       # PWA install prompt logic
+│   │   └── share-handler.ts        # Share target handler
 │   └── data/
 │       ├── tlds_suspicious.ts      # Suspicious TLD list
 │       └── keywords.ts             # Phishing keyword patterns
@@ -229,6 +258,7 @@ qrcheck/
 │   └── intel-urlhaus.ts            # URLHaus malware database
 ├── public/
 │   ├── shorteners.json             # 200+ URL shortener domains (generated)
+│   ├── icons/                      # PWA icon suite
 │   └── urlhaus/
 │       └── hosts.json              # Malicious host list (generated)
 ├── scripts/
@@ -459,6 +489,14 @@ QRCheck is built with modern web technologies for performance, security, and mai
 
 Notable enhancements from the last 20 commits:
 
+### Progressive Web App (December 2024)
+- ✅ **Full PWA implementation** — Install to home screen, offline support, share target
+- ✅ **Service worker with Workbox** — Smart caching strategies for threat data and API responses
+- ✅ **Install prompt** — Shows after first successful scan
+- ✅ **Offline mode** — Tier 1 + Tier 2 checks work without internet
+- ✅ **Share target** — Receive URLs from other apps directly
+- ✅ **Update notifications** — Users notified when new version available
+
 ### UX & Transparency
 - ✅ **Auto-expanded analysis details** — Users see full breakdown without extra clicks
 - ✅ **Enhanced footer privacy messaging** — Clear, centered two-line statement
@@ -580,7 +618,6 @@ Traditional security tools wait for all checks before showing results. QRCheck d
 
 **Performance**
 - Optimize Tier 1 checks to run even faster
-- Implement service worker for offline functionality
 - Add request deduplication for concurrent scans
 
 **UX & Accessibility**
@@ -619,6 +656,7 @@ We'll respond within 48 hours and work with you to address the issue.
 
 Future enhancements under consideration:
 
+- [x] Progressive Web App with offline support
 - [ ] Browser extension (Chrome, Firefox, Safari)
 - [ ] Mobile apps (iOS, Android) with native camera
 - [ ] Bulk URL scanning from CSV/text file
