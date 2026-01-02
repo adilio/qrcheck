@@ -21,3 +21,4 @@ AGENTS.md
 docs/PROJECT_STATUS.md
 docs/IMPLEMENTATION_PLAN.md
 deno.lock
+coverage/
