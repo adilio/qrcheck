@@ -1,6 +1,7 @@
+import { createHash } from 'crypto';
 import type { Handler } from '@netlify/functions';
 
-// Helper function for Google Safe Browsing API
+// Helper function for Google Safe Browsing API (V5)
 async function queryGoogleSafeBrowsing(targetUrl: string): Promise<Array<{ threatType: string }>> {
   if (!process.env.GSB_API_KEY) {
     // Fallback to pattern analysis when no API key is available
@@ -16,28 +17,36 @@ async function queryGoogleSafeBrowsing(targetUrl: string): Promise<Array<{ threa
     return [];
   }
 
-  const response = await fetch(
-    `https://safebrowsing.googleapis.com/v4/threatMatches:find?key=${process.env.GSB_API_KEY}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        client: { clientId: 'qrcheck', clientVersion: '1.0.0' },
-        threatInfo: {
-          threatTypes: ['MALWARE', 'SOCIAL_ENGINEERING', 'UNWANTED_SOFTWARE', 'POTENTIALLY_HARMFUL_APPLICATION'],
-          platformTypes: ['ANY_PLATFORM'],
-          threatEntryTypes: ['URL'],
-          threatEntries: [{ url: targetUrl }]
-        }
-      }),
-      signal: AbortSignal.timeout(6_000)
-    }
-  );
+  // V5: hash-based lookup — compute SHA-256 of the canonicalized URL
+  const parsed = new URL(targetUrl);
+  const canonical = `${parsed.protocol}//${parsed.hostname.replace(/\.$/, '').toLowerCase()}${parsed.pathname}${parsed.search}`;
+  const urlHash = createHash('sha256').update(canonical).digest();
+  const hashPrefix = urlHash.subarray(0, 4).toString('base64');
+  const fullHashB64 = urlHash.toString('base64');
+
+  const endpoint = new URL('https://safebrowsing.googleapis.com/v5/hashes:search');
+  endpoint.searchParams.set('key', process.env.GSB_API_KEY);
+  endpoint.searchParams.append('hashPrefixes', hashPrefix);
+
+  const response = await fetch(endpoint.toString(), {
+    headers: { 'User-Agent': 'qrcheck/1.0.0' },
+    signal: AbortSignal.timeout(6_000)
+  });
   if (!response.ok) {
     throw new Error(`GSB request failed: ${response.status}`);
   }
   const payload = await response.json();
-  return payload.threatMatches ?? [];
+
+  // V5 response: fullHashes[].{ fullHash, fullHashDetails[].{ threatType } }
+  // Filter to entries whose full hash matches ours to avoid false positives from prefix collisions
+  const fullHashes: Array<{
+    fullHash: string;
+    fullHashDetails: Array<{ threatType: string }>;
+  }> = payload.fullHashes ?? [];
+
+  return fullHashes
+    .filter(h => h.fullHash === fullHashB64)
+    .flatMap(h => h.fullHashDetails);
 }
 
 function isIpAddress(input: string): boolean {
