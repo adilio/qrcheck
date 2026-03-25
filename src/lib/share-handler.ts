@@ -34,7 +34,7 @@ export async function shareResults(url: string, verdict: string): Promise<boolea
       url: window.location.origin
     });
     return true;
-  } catch (error) {
+  } catch (_error) {
     // User cancelled or share failed
     return false;
   }

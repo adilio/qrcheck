@@ -3,11 +3,9 @@ import { get } from 'svelte/store';
 
 describe('network-status', () => {
   let originalNavigator: Navigator;
-  let originalWindow: Window & typeof globalThis;
 
   beforeEach(() => {
     originalNavigator = global.navigator;
-    originalWindow = global.window;
     vi.resetModules();
   });
 

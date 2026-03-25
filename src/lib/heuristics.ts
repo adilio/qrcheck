@@ -104,7 +104,7 @@ export interface FormattedHeuristicSummary {
 /**
  * Analyzes QR content for suspicious patterns
  */
-export async function analyzeHeuristics(content: QRContent, threatIntel?: any): Promise<HeuristicResult> {
+export async function analyzeHeuristics(content: QRContent, threatIntel?: unknown): Promise<HeuristicResult> {
   // Initialize result with low risk
   const result: HeuristicResult = {
     risk: 'low',
@@ -277,7 +277,7 @@ export async function analyzeHeuristics(content: QRContent, threatIntel?: any): 
       };
       addRecommendation('Unable to complete all threat intelligence checks. Try again later.');
     }
-  } catch (e) {
+  } catch (_e) {
     // Both checks failed, set fallback values
     result.details.enhancedThreatIntel = {
       threat_detected: false,
@@ -967,7 +967,7 @@ export async function analyzeUrl(url: string, options: UrlAnalysisOptions = {}):
         result.score += Math.min(result.signals.redirect_hops * 5, 20);
         result.reasons.push(`Multiple redirects (${result.signals.redirect_hops})`);
       }
-    } catch (error) {
+    } catch (_error) {
       result.reasons.push('Redirect expansion failed');
     }
 
@@ -980,7 +980,7 @@ export async function analyzeUrl(url: string, options: UrlAnalysisOptions = {}):
         result.score += 15;
         result.reasons.push(`Final domain age ${domainAge.days} days`);
       }
-    } catch (error) {
+    } catch (_error) {
       // Ignore domain age errors
     }
 
@@ -1008,7 +1008,7 @@ export async function analyzeUrl(url: string, options: UrlAnalysisOptions = {}):
     }
 
     return result;
-  } catch (error) {
+  } catch (_error) {
     // If URL parsing fails, return a safe result with error
     return {
       score: 50,

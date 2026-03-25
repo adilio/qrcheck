@@ -42,9 +42,9 @@ describe('pwa', () => {
   });
 
   it('does nothing in non-browser environment', async () => {
-    // @ts-ignore - intentionally delete window for test
+    // @ts-expect-error - intentionally delete window for test
     const originalWindow = global.window;
-    // @ts-ignore
+    // @ts-expect-error - delete non-optional property for test
     delete global.window;
 
     const { registerServiceWorker } = await import('../../src/lib/pwa');

@@ -25,8 +25,8 @@ export const handler: Handler = async (event) => {
     const data = await response.json();
 
     // RDAP events array typically includes a registration/creation entry with eventDate
-    const events: any[] = Array.isArray(data.events) ? data.events : [];
-    const creationEvent = events.find((event: any) =>
+    const events: unknown[] = Array.isArray(data.events) ? data.events : [];
+    const creationEvent = events.find((event: unknown) =>
       typeof event?.eventAction === 'string' &&
       ['registration', 'creation', 'registered'].includes(event.eventAction.toLowerCase())
     );

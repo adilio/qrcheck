@@ -208,7 +208,7 @@ export async function fetchWithLocalCache<T>(
   try {
     const cached = JSON.parse(localStorage.getItem(storageKey) ?? "null");
     if (cached && Date.now() - Date.parse(cached.savedAt) < ttlMs) return cached.payload as T;
-  } catch {}
+  } catch { /* stale or missing cache entry */ }
   const res = await fetch(url, { cache: "no-cache" });
   if (!res.ok) throw new Error(`fetch failed ${res.status}`);
   const payload = await res.json() as T;

@@ -86,7 +86,7 @@ export async function analyzeTier1(content: QRContent): Promise<HeuristicResult>
 
       result.score += shortenerScore;
     }
-  } catch (e) {
+  } catch (_e) {
     // Shortener check failed, continue
   }
 
@@ -163,7 +163,7 @@ export async function analyzeTier1(content: QRContent): Promise<HeuristicResult>
       result.score += 25;
       addRecommendation('URL uses a suspicious top-level domain (TLD).');
     }
-  } catch (e) {
+  } catch (_e) {
     // Domain parsing failed
   }
 
@@ -189,7 +189,7 @@ export async function analyzeTier1(content: QRContent): Promise<HeuristicResult>
         break;
       }
     }
-  } catch (e) {
+  } catch (_e) {
     // Typosquatting check failed
   }
 
@@ -293,7 +293,7 @@ export async function analyzeTier2(content: QRContent, tier1Result: HeuristicRes
       result.recommendations.push('This URL is listed in the URLHaus malware database.');
       result.risk = 'high';
     }
-  } catch (e) {
+  } catch (_e) {
     // URLHaus cache check failed, will be checked in Tier 3
   }
 

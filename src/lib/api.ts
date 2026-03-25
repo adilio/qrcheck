@@ -21,7 +21,7 @@ export interface IntelResponse {
     ok: boolean;
     source: string;
     query_status: string;
-    matches: any[];
+    matches: unknown[];
   } | null;
 }
 
@@ -147,7 +147,7 @@ async function detectRedirectsViaFetch(url: string): Promise<ResolveResponse> {
       hops: [url],
       final: url
     };
-  } catch (error) {
+  } catch (_error) {
     // If even the proxy fails, return the original
     return {
       hops: [url],
@@ -356,15 +356,15 @@ async function checkThreatIntel(domain: string, url: string): Promise<ThreatInte
 
   // Normalize the response structure
   const normalizedThreats = Array.isArray(data.threats)
-    ? data.threats.map((item: any) => ({
-        source: String(item.source || item?.name || 'Unknown provider'),
-        details: String(item.details || item?.message || 'Reported a potential threat'),
-        score: typeof item.score === 'number' ? item.score : 0
+    ? data.threats.map((item: unknown) => ({
+        source: String((item as Record<string, unknown>).source || (item as Record<string, unknown>)?.name || 'Unknown provider'),
+        details: String((item as Record<string, unknown>).details || (item as Record<string, unknown>)?.message || 'Reported a potential threat'),
+        score: typeof (item as Record<string, unknown>).score === 'number' ? (item as Record<string, unknown>).score as number : 0
       }))
     : [];
 
   const normalizedSources = Array.isArray(data.sources_checked)
-    ? data.sources_checked.map((source: any) => String(source))
+    ? data.sources_checked.map((source: unknown) => String(source))
     : [];
 
   return {

@@ -18,6 +18,9 @@ module.exports = {
       globals: {
         expect: 'readonly',
         test: 'readonly'
+      },
+      rules: {
+        '@typescript-eslint/no-explicit-any': 'off'
       }
     }
   ]

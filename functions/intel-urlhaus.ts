@@ -85,8 +85,8 @@ export const handler: Handler = async (event) => {
       },
       body: JSON.stringify({ ok: true, source: "urlhaus", query_status: result?.query_status || "failed", matches })
     };
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('URLHaus lookup failed:', e);
-    return { statusCode: 500, body: JSON.stringify({ ok: false, error: e?.message || "lookup error" }) };
+    return { statusCode: 500, body: JSON.stringify({ ok: false, error: e instanceof Error ? e.message : "lookup error" }) };
   }
 };

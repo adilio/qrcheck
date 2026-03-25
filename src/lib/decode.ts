@@ -77,7 +77,7 @@ export async function decodeQRFromFile(file: File): Promise<string> {
     try {
       const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
       return decodeQRFromImageData(image);
-    } catch (err) {
+    } catch (_err) {
       console.debug('Normal QR decode failed, trying alternatives');
     }
 
@@ -86,7 +86,7 @@ export async function decodeQRFromFile(file: File): Promise<string> {
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const enhanced = enhanceImageForQR(imageData);
       return decodeQRFromImageData(enhanced);
-    } catch (err) {
+    } catch (_err) {
       console.debug('Enhanced QR decode failed');
     }
 
@@ -95,7 +95,7 @@ export async function decodeQRFromFile(file: File): Promise<string> {
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const adaptive = adaptiveThreshold(imageData);
       return decodeQRFromImageData(adaptive);
-    } catch (err) {
+    } catch (_err) {
       console.debug('Adaptive threshold QR decode failed');
     }
 
@@ -109,7 +109,7 @@ export async function decodeQRFromFile(file: File): Promise<string> {
 
       const flippedImage = ctx.getImageData(0, 0, canvas.width, canvas.height);
       return decodeQRFromImageData(flippedImage);
-    } catch (err) {
+    } catch (_err) {
       console.debug('Flipped QR decode failed');
     }
 
@@ -118,7 +118,7 @@ export async function decodeQRFromFile(file: File): Promise<string> {
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const inverted = invertColors(imageData);
       return decodeQRFromImageData(inverted);
-    } catch (err) {
+    } catch (_err) {
       console.debug('Inverted QR decode failed');
     }
 
@@ -135,7 +135,7 @@ export async function decodeQRFromFile(file: File): Promise<string> {
   } finally {
     // Clean up bitmap to free memory
     if ('close' in bitmap) {
-      (bitmap as any).close();
+      (bitmap as { close(): void }).close();
     }
   }
 }
