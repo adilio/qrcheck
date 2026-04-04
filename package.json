@@ -37,7 +37,7 @@
     "eslint": "^8.50.0",
     "jsdom": "^23.0.0",
     "jsqr": "^1.4.0",
-    "netlify-cli": "^24.5.1",
+    "netlify-cli": "^24.9.0",
     "punycode": "^2.3.0",
     "svelte": "^5.0.0",
     "typescript": "^5.2.0",
