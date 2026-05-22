@@ -101,6 +101,19 @@ export interface FormattedHeuristicSummary {
   intelSources: FormattedIntelSource[];
 }
 
+interface UrlhausThreatIntel {
+  query_status?: string;
+  matches?: unknown[];
+}
+
+interface ThreatIntelPayload {
+  urlhaus?: UrlhausThreatIntel;
+}
+
+function hasUrlhausThreatIntel(threatIntel: unknown): threatIntel is ThreatIntelPayload {
+  return typeof threatIntel === 'object' && threatIntel !== null && 'urlhaus' in threatIntel;
+}
+
 /**
  * Analyzes QR content for suspicious patterns
  */
@@ -208,7 +221,7 @@ export async function analyzeHeuristics(content: QRContent, threatIntel?: unknow
   }
 
   // Check threat intelligence (URLHaus)
-  if (threatIntel?.urlhaus) {
+  if (hasUrlhausThreatIntel(threatIntel) && threatIntel.urlhaus) {
     const urlhausData = threatIntel.urlhaus;
     const matchCount = urlhausData.matches?.length || 0;
 
