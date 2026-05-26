@@ -24,7 +24,8 @@
   "overrides": {
     "serialize-javascript": "^7.0.4",
     "uuid": "^14.0.0",
-    "@fastify/static": "^9.1.1"
+    "@fastify/static": "^9.1.1",
+    "qs": "^6.15.2"
   },
   "devDependencies": {
     "@netlify/functions": "^2.0.0",
