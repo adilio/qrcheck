@@ -93,6 +93,32 @@ test file `tests/unit/heuristics.test.ts`.
 
 ---
 
+## Deferred / intentionally not built (tracked as issues)
+
+Some of the code being removed represents *unfinished intent*, not just
+redundancy. To keep the repo clean without losing the ask, each is captured as
+a GitHub issue and the stub is then deleted (recoverable from git history if
+revived):
+
+- **Client-side redirect expansion for CORS-blocked shorteners** —
+  [#13](https://github.com/adilio/qrcheck/issues/13). The `resolveViaProxy` /
+  `detectRedirectsViaFetch` no-op was an attempt at this; the Netlify resolver
+  may already make it redundant.
+- **Real domain-reputation / domain-age signal** —
+  [#14](https://github.com/adilio/qrcheck/issues/14). Replaces the
+  `Math.random()` placeholder; the live Tier 3 domain-age check may already
+  cover it.
+- **Signal-by-signal analysis model (`UrlSignals` / `analyzeUrl`)** —
+  [#15](https://github.com/adilio/qrcheck/issues/15). Designed but never adopted;
+  decide whether to adopt or permanently drop in favor of the tiered model.
+
+> Note: the redundant code in the sections above (e.g. duplicate
+> `analyzeHeuristics`, dead exports) carries **no** lost intent — the feature
+> lives on in `analyzeHeuristicsTiered`. Only the three items here represent
+> asks worth tracking.
+
+---
+
 ## Suggested commit sequence
 
 1. **Zero-risk deletions** — `analyzeHeuristics` + dead helpers,
