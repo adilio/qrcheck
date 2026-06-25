@@ -132,3 +132,99 @@ revived):
 Run `npm run typecheck && npm run lint && npm run test` before pushing.
 
 **Estimated removal:** ~600+ lines with zero behavioral change to the app.
+
+---
+
+## Dependency & bundle audit (YAGNI)
+
+Findings from tracing every dependency to its actual usage, plus measuring the
+installed tree (`node_modules` = **502 MB / 1,544 packages**) and the shipped
+production build (browser bundle = **258 KB raw / 90 KB gzip**; PWA precache =
+**~1.6 MB**).
+
+### Declared dependencies never imported — remove
+
+| Package | Declared as | Why it's dead |
+|---|---|---|
+| `ajv-formats` | `dependencies` | Never imported; the one contract test uses bare `ajv` with no `addFormats` |
+| `undici` | `dependencies` | Never imported; Netlify functions use global `fetch` (Node 18+) |
+| `punycode` | `devDependencies` | Never imported (only appears as object keys/strings); detection uses `xn--` matching; Node has a builtin |
+| `esbuild` | `devDependencies` | Never imported directly; Vite and Netlify each bundle their own copy transitively |
+
+> After removing the two `dependencies`, the app ships with **zero used runtime
+> dependencies** in that block — everything is bundled by Vite or is a builtin.
+
+### Replace with our own code
+
+- **`ajv`** (devDep) — used by a single test (`tests/unit/api.contract.test.ts`)
+  validating two trivial schemas. Replace with ~10 lines of hand-rolled shape
+  checks (the existing `validateResolveResponse` in `api.ts` is the pattern).
+  Dropping it also makes `contracts/*.schema.json` optional.
+
+### The big one: `netlify-cli` transitive bloat
+
+`netlify-cli` (devDep) is responsible for the **vast majority** of the 502 MB
+install tree:
+
+- Declares **98 direct dependencies**; the heaviest packages alone total
+  **≥175 MB**.
+- Pulls in machinery wholly irrelevant to a QR scanner: `@electric-sql/pglite`
+  (**full Postgres-in-WASM, 22 MB**), `@octokit/rest` (**GitHub API client,
+  17 MB**), `@opentelemetry/*` (tracing, 22 MB), `rxjs`, `zod` (×2 majors),
+  `svgo`, `inquirer-autocomplete-prompt`, `web-streams-polyfill`.
+- Used only by `npm run dev:netlify`.
+
+**Action:** change `dev:netlify` to `npx netlify-cli dev` and drop `netlify-cli`
+from `devDependencies`. Reclaims the majority of the install tree and ~half the
+package count, with no impact on the app, build, or CI. (Production dep tree is
+**9 packages**.) This is the single biggest footprint win in the repo.
+
+### Misclassified — move, don't remove
+
+- **`jsqr`** is under `devDependencies` but is imported at runtime by
+  `src/lib/decode.ts` and is ~252 KB of the shipped bundle (the core QR decoder).
+  **Move to `dependencies`.** Never rewrite it — QR decoding is genuinely hard.
+
+### Shipped-weight YAGNI (assets in the PWA precache, not packages)
+
+The browser **bundle** is already lean (jsqr is essentially the whole 90 KB
+gzip). The waste is in precached assets — every user downloads these on first
+load:
+
+| Precached file | Size | Action |
+|---|---|---|
+| `share-card.png` | **692 KB** | Larger than the entire JS bundle; it's a social-share image with no offline need. **Exclude from precache** (and/or compress). |
+| `urlhaus/hosts.json` | **352 KB** | Already fetched at runtime via `StaleWhileRevalidate`, so the 13,208-host DB ships **twice**. **Drop from precache**, let runtime caching own it. |
+
+Trimming both roughly **halves** the first-load payload. Tune
+`workbox.globPatterns` in `vite.config.mts` accordingly.
+
+### Package-level dead spots surfaced by the build
+
+- **`node:crypto` fallback** (`src/lib/expand.ts:41`) — Vite externalizes it for
+  the browser; it's a fallback after `crypto.subtle` (line 32), which is always
+  present in browsers, so the branch is dead in the shipped build. Remove it.
+- **`api.ts` is both statically and dynamically imported** — the build warns this
+  defeats code-splitting (it folds into the main chunk). Resolves once the static
+  import in `App.svelte` is cleaned up (see the dead-import item above).
+
+### Leave alone
+
+- `overrides` block (`serialize-javascript`, `uuid`, `@fastify/static`, `qs`) —
+  security pins for transitive deps, not direct deps. Keep; revisit periodically.
+- Toolchain (`vite`, `svelte`, `@sveltejs/vite-plugin-svelte`, `vite-plugin-pwa`,
+  `typescript`, `@types/node`, `@netlify/functions` types) and test/lint stack
+  (`vitest`, `@vitest/coverage-v8`, `jsdom`, `@playwright/test`, `eslint`,
+  `@typescript-eslint/*`) — all genuinely used.
+
+### Suggested dependency cleanup order
+
+1. Drop unused: `ajv-formats`, `undici`, `punycode`, `esbuild`.
+2. De-vendor `netlify-cli` → `npx`; biggest footprint win.
+3. Move `jsqr` to `dependencies`.
+4. Replace `ajv` with hand-rolled validation; drop `ajv` (+ optionally the schema files).
+5. Trim PWA precache: exclude `share-card.png` and `urlhaus/hosts.json`.
+6. Remove the dead `node:crypto` branch in `expand.ts`.
+
+Verify after each step: `npm install` succeeds, `npm run ci:verify` passes, and
+`npx vite build` produces a working bundle.
