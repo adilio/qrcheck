@@ -1,5 +1,7 @@
 const base = import.meta.env.VITE_API_BASE;
 
+const KNOWN_SHORTENERS = ['bit.ly', 'tinyurl.com', 't.co', 'qrco.de', 'buff.ly', 'goo.gl', 'ow.ly', 'tiny.cc'];
+
 export interface ResolveResponse {
   hops: string[];
   final: string;
@@ -92,68 +94,7 @@ async function resolveWithNetlifyFunction(url: string): Promise<ResolveResponse 
 }
 
 async function resolveChainWithFallback(url: string): Promise<ResolveResponse> {
-  // First, try the enhanced local resolution
-  const localResult = await resolveChainLocally(url);
-
-  // If local resolution failed and it's a known shortener, try CORS proxy
-  if (localResult.hops.length === 1) {
-    const urlObj = new URL(url);
-    const domain = urlObj.hostname.toLowerCase();
-    const knownShorteners = ['bit.ly', 'tinyurl.com', 't.co', 'qrco.de', 'buff.ly', 'goo.gl', 'ow.ly', 'tiny.cc'];
-
-    if (knownShorteners.some(shortener => domain.includes(shortener))) {
-      console.info(`Local resolution failed for ${domain}, trying CORS proxy...`);
-
-      try {
-        const proxyResult = await resolveViaProxy(url);
-        if (proxyResult.hops.length > 1) {
-          console.info(`CORS proxy successfully expanded ${domain}`);
-          return proxyResult;
-        }
-      } catch (err) {
-        console.warn(`CORS proxy also failed for ${domain}:`, err);
-      }
-    }
-  }
-
-  return localResult;
-}
-
-async function resolveViaProxy(url: string): Promise<ResolveResponse> {
-  // Proxy-based approach is not reliable for redirect detection
-  // Fall back to fetch-based detection
-  return await detectRedirectsViaFetch(url);
-}
-
-async function detectRedirectsViaFetch(url: string): Promise<ResolveResponse> {
-
-  // Use a service that can follow redirects and return the final URL
-  try {
-    // We can use a combination of fetch with no-cors mode and manual redirect handling
-    // But this is limited by browser security
-
-    // For now, let's try using the finalurl.org service (if it exists)
-    // or create a simple approach that at least tells us there's a redirect
-
-    await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, {
-      method: 'HEAD',
-      mode: 'cors'
-    });
-
-    // If we get here, we got some response, but we can't see redirects
-    // So we'll have to return the original URL but indicate we know it's a shortener
-
-    return {
-      hops: [url],
-      final: url
-    };
-  } catch (_error) {
-    // If even the proxy fails, return the original
-    return {
-      hops: [url],
-      final: url
-    };
-  }
+  return await resolveChainLocally(url);
 }
 
 async function resolveChainLocally(url: string): Promise<ResolveResponse> {
@@ -195,8 +136,7 @@ async function resolveChainLocally(url: string): Promise<ResolveResponse> {
           if (redirectCount === 0) {
             const urlObj = new URL(currentUrl);
             const domain = urlObj.hostname.toLowerCase();
-            const knownShorteners = ['bit.ly', 'tinyurl.com', 't.co', 'qrco.de', 'buff.ly', 'goo.gl', 'ow.ly', 'tiny.cc'];
-            if (knownShorteners.some(shortener => domain.includes(shortener))) {
+            if (KNOWN_SHORTENERS.some(shortener => domain.includes(shortener))) {
               console.info(`Redirect expansion blocked by CORS for ${domain}. This is expected for some shorteners.`);
             }
           }
@@ -239,8 +179,7 @@ async function resolveChainLocally(url: string): Promise<ResolveResponse> {
   if (hops.length === 1 && redirectCount === 0) {
     const urlObj = new URL(url);
     const domain = urlObj.hostname.toLowerCase();
-    const knownShorteners = ['bit.ly', 'tinyurl.com', 't.co', 'qrco.de', 'buff.ly', 'goo.gl', 'ow.ly', 'tiny.cc'];
-    if (knownShorteners.some(shortener => domain.includes(shortener))) {
+    if (KNOWN_SHORTENERS.some(shortener => domain.includes(shortener))) {
       console.info(`This is a shortened URL from ${domain}. Redirect expansion may be limited by browser security policies.`);
     }
   }

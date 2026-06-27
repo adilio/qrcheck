@@ -10,7 +10,7 @@ export default defineConfig(({ command }) => ({
     svelte(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['qrcheck.png', 'share-card.png', 'icons/*.png'],
+      includeAssets: ['qrcheck.png', 'icons/*.png'],
       manifest: {
         name: 'QRCheck - Safe QR Code Scanner',
         short_name: 'QRCheck',
@@ -61,6 +61,10 @@ export default defineConfig(({ command }) => ({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,png,svg,json}'],
+        // Keep these out of the precache: share-card.png is a large social-share
+        // image with no offline need, and urlhaus/hosts.json is already fetched at
+        // runtime via StaleWhileRevalidate (precaching it ships the DB twice).
+        globIgnores: ['**/share-card.png', '**/urlhaus/hosts.json'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/.*\.json$/,

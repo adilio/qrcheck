@@ -3,7 +3,6 @@
   import { DEV_ENABLE_MANUAL_URL } from './lib/flags';
   import { decodeQRFromFile, decodeQRFromImageData, parseQRContent, type QRContent } from './lib/decode';
   import {
-    analyzeHeuristics,
     formatHeuristicResults,
     type CheckStatus,
     type FormattedHeuristicSummary,
@@ -12,7 +11,6 @@
   } from './lib/heuristics';
   import { analyzeHeuristicsTiered, type TieredHeuristicResult } from './lib/heuristics-tiered';
   import { resolveChain, intel, type IntelResponse } from './lib/api';
-  import { expandFirstHop, expandFullChain } from './lib/expand';
   import { startCamera, stopCamera } from './lib/camera';
   import ResultsCard from './components/ResultsCard.svelte';
   import OfflineIndicator from './components/OfflineIndicator.svelte';

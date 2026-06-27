@@ -21,6 +21,7 @@ type RequestInit = {
 const MAX_HOPS = 10;
 const PER_HOP_TIMEOUT_MS = 1000;
 const TOTAL_TIMEOUT_MS = 10_000;
+const KNOWN_SHORTENERS = ['bit.ly', 'tinyurl.com', 't.co', 'qrco.de', 'buff.ly', 'goo.gl', 'ow.ly', 'tiny.cc'];
 const CACHE = new TTLCache<RedirectExpansion>({
   dbName: 'qrcheck-cache',
   storeName: 'expansion',
@@ -29,17 +30,12 @@ const CACHE = new TTLCache<RedirectExpansion>({
 });
 
 async function sha256(input: string): Promise<string> {
-  if (typeof crypto !== 'undefined' && crypto.subtle) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(input);
-    const digest = await crypto.subtle.digest('SHA-256', data);
-    return Array.from(new Uint8Array(digest))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-  }
-
-  const { createHash } = await import('node:crypto');
-  return createHash('sha256').update(input).digest('hex');
+  const encoder = new TextEncoder();
+  const data = encoder.encode(input);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 function normalizeUrl(url: URL): string {
@@ -140,8 +136,7 @@ export async function expandUrl(originalUrl: string, options: ExpandOptions = {}
         // Check if this is a known shortener and provide helpful context
         if (hops === 1) {
           const domain = currentUrl.hostname.toLowerCase();
-          const knownShorteners = ['bit.ly', 'tinyurl.com', 't.co', 'qrco.de', 'buff.ly', 'goo.gl', 'ow.ly', 'tiny.cc'];
-          if (knownShorteners.some(shortener => domain.includes(shortener))) {
+          if (KNOWN_SHORTENERS.some(shortener => domain.includes(shortener))) {
             console.info(`Redirect expansion blocked by CORS for ${domain}. This is expected for some shorteners due to browser security policies.`);
           }
         }
@@ -169,8 +164,7 @@ export async function expandUrl(originalUrl: string, options: ExpandOptions = {}
           // Check if this is a known shortener and provide helpful context
           if (hops === 1) {
             const domain = currentUrl.hostname.toLowerCase();
-            const knownShorteners = ['bit.ly', 'tinyurl.com', 't.co', 'qrco.de', 'buff.ly', 'goo.gl', 'ow.ly', 'tiny.cc'];
-            if (knownShorteners.some(shortener => domain.includes(shortener))) {
+            if (KNOWN_SHORTENERS.some(shortener => domain.includes(shortener))) {
               console.info(`Redirect expansion blocked by CORS for ${domain}. Both HEAD and GET requests failed due to browser security policies.`);
             }
           }
@@ -221,33 +215,4 @@ export async function expandUrl(originalUrl: string, options: ExpandOptions = {}
   }
 
   return result;
-}
-
-/**
- * Expand only the first hop of a URL redirect chain
- * This provides instant feedback for URL shorteners (most important hop)
- * with a quick 1-second timeout.
- *
- * @param url - The URL to expand
- * @returns Redirect expansion with first hop only
- */
-export async function expandFirstHop(url: string): Promise<RedirectExpansion> {
-  return expandUrl(url, {
-    maxHops: 1,
-    timeout: 1000 // 1 second timeout for first hop
-  });
-}
-
-/**
- * Expand the full redirect chain in the background
- * This continues the expansion after the first hop has been shown to the user.
- *
- * @param url - The URL to expand
- * @returns Complete redirect expansion
- */
-export async function expandFullChain(url: string): Promise<RedirectExpansion> {
-  return expandUrl(url, {
-    maxHops: MAX_HOPS,
-    timeout: TOTAL_TIMEOUT_MS
-  });
 }
