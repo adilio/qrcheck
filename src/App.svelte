@@ -9,7 +9,7 @@
     type FormattedIntelSource,
     type FormattedHeuristicCheck
   } from './lib/heuristics';
-  import { analyzeHeuristicsTiered, type TieredHeuristicResult } from './lib/heuristics-tiered';
+  import { analyzeHeuristicsTiered, type AnalysisOptions } from './lib/heuristics-tiered';
   import { resolveChain, intel, type IntelResponse } from './lib/api';
   import { startCamera, stopCamera } from './lib/camera';
   import ResultsCard from './components/ResultsCard.svelte';
@@ -629,9 +629,8 @@
 
       // If it's a URL, continue with additional checks
       if (qrContent.type === 'url') {
-        await runUrlAnalysis(raw);
-        // Run heuristics analysis after gathering threat intel
-        await runHeuristicsAnalysis(qrContent, intelRes);
+        // Resolves redirects, then runs heuristics + live intel concurrently
+        await runUrlAnalysis(qrContent, raw);
       } else {
         // Run heuristics analysis for non-URL content
         await runHeuristicsAnalysis(qrContent);
@@ -645,7 +644,7 @@
     }
   }
 
-  async function runHeuristicsAnalysis(content: QRContent, intel?: IntelResponse) {
+  async function runHeuristicsAnalysis(content: QRContent, options: AnalysisOptions = {}) {
     step = 'Analysing locally…';
 
     // Initialize progressive state
@@ -661,7 +660,7 @@
     ];
 
     // Use progressive tiered analysis for instant feedback
-    const progressiveAnalysis = analyzeHeuristicsTiered(content);
+    const progressiveAnalysis = analyzeHeuristicsTiered(content, options);
 
     for await (const tieredResult of progressiveAnalysis) {
       // Update heuristics result with latest tier
@@ -727,7 +726,7 @@
     }
   }
 
-  async function runUrlAnalysis(raw: string) {
+  async function runUrlAnalysis(content: QRContent, raw: string) {
     try {
       // Execute redirect analysis step
       await executeAnalysisStep('redirects');
@@ -738,8 +737,8 @@
       const knownShorteners = ['bit.ly', 'tinyurl.com', 't.co', 'qrco.de', 'buff.ly', 'goo.gl', 'ow.ly', 'tiny.cc'];
       const isKnownShortener = knownShorteners.some(shortener => domain.includes(shortener));
 
-      // Use resolveChain for better CORS handling with Netlify Functions
-      // This provides better redirect expansion than client-side only
+      // Resolve the redirect chain first (server-side via the Netlify function)
+      // so every downstream signal scores the real destination, not the shortener.
       const redirectResult = await resolveChain(raw);
       hops = redirectResult.hops;
       urlText = redirectResult.final;
@@ -752,8 +751,17 @@
       await executeAnalysisStep('threat-intel-abuseipdb');
       await executeAnalysisStep('threat-intel-urlhaus');
 
-      // Run the actual threat intelligence check on the final resolved URL
-      intelRes = await intel(redirectResult.final || raw);
+      // P3 harness: the live URLHaus lookup runs concurrently with the tiered
+      // heuristics — one slow signal never blocks the verdict.
+      const intelPromise = intel(redirectResult.final || raw)
+        .then((res) => { intelRes = res; })
+        .catch((err) => console.warn('URLHaus live lookup failed:', err));
+
+      await runHeuristicsAnalysis(content, {
+        finalUrl: redirectResult.final,
+        redirectChain: redirectResult.hops
+      });
+      await intelPromise;
 
       flow = 'complete';
       trackScanAndPromptInstall();

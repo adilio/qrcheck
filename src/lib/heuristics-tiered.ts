@@ -1,14 +1,21 @@
 /**
  * Tiered Heuristics Analysis
  *
- * This module provides a progressive heuristics analysis system that delivers
- * instant feedback by splitting checks into 3 tiers based on execution time:
+ * Progressive analysis in 3 tiers:
  *
- * - Tier 1 (Instant, <50ms): Pure client-side, synchronous checks
- * - Tier 2 (Fast, 100-300ms): Network checks with local caching
- * - Tier 3 (Async, 200-500ms): Server-side API calls
+ * - Tier 1 (Instant, <50ms): pure client-side, synchronous checks
+ * - Tier 2 (Fast): local URLHaus cache lookup
+ * - Tier 3 (Async): server-side API calls (domain age, threat intel)
  *
- * This enables progressive UI updates and dramatically improves perceived performance.
+ * Tier 2 and Tier 3 run CONCURRENTLY inside a bounded harness: every network
+ * signal has its own timeout, results merge into the verdict as they arrive
+ * (in completion order), and a hung or failed signal degrades to "unknown"
+ * without ever blocking the verdict. Worst-case latency is the slowest single
+ * signal's timeout, not the sum of all signals.
+ *
+ * When a redirect chain has been resolved (see functions/resolve.ts), pass the
+ * final destination via `AnalysisOptions.finalUrl` — URL heuristics then score
+ * the real endpoint while the shortener signal still reflects the original URL.
  */
 
 import type { QRContent } from './decode';
@@ -25,19 +32,64 @@ export interface TieredHeuristicResult {
   isComplete: boolean;
 }
 
+export interface AnalysisOptions {
+  /** Resolved final destination (after redirect expansion). Defaults to the raw URL. */
+  finalUrl?: string;
+  /** Ordered redirect chain including the original and final URL. */
+  redirectChain?: string[];
+}
+
+/**
+ * A signal group's contribution to the verdict. Tiers produce deltas that are
+ * merged into the cumulative result in whatever order they complete.
+ */
+export interface SignalDelta {
+  scoreDelta: number;
+  details: HeuristicResult['details'];
+  recommendations: string[];
+}
+
+const TIER2_TIMEOUT_MS = 4_000;
+const TIER3_TIMEOUT_MS = 10_000;
+
+function emptyDelta(): SignalDelta {
+  return { scoreDelta: 0, details: {}, recommendations: [] };
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), ms);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function hostnameOf(url: string): string | null {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function riskFor(score: number): HeuristicResult['risk'] {
+  if (score >= 70) return 'high';
+  if (score >= 40) return 'medium';
+  return 'low';
+}
+
 /**
  * Tier 1: Instant client-side checks (<50ms)
  *
- * These checks run synchronously and provide immediate feedback:
- * - URL parsing and protocol validation
- * - Suspicious TLD detection
- * - Keyword detection
- * - URL shortener identification
- * - Typosquatting detection
- * - Homograph attack detection
- * - Obfuscation pattern detection
+ * Structure/keyword/domain checks run against the resolved final URL when one
+ * is provided; the shortener check always runs against the original URL, since
+ * that signal is about how the link was presented, not where it lands.
  */
-export async function analyzeTier1(content: QRContent): Promise<HeuristicResult> {
+export async function analyzeTier1(content: QRContent, options: AnalysisOptions = {}): Promise<HeuristicResult> {
   const result: HeuristicResult = {
     risk: 'low',
     score: 0,
@@ -50,15 +102,16 @@ export async function analyzeTier1(content: QRContent): Promise<HeuristicResult>
     return result;
   }
 
-  const url = content.text;
+  const originalUrl = content.text;
+  const url = options.finalUrl || originalUrl;
   const recommendationSet = new Set<string>();
   const addRecommendation = (message: string) => {
     if (message) recommendationSet.add(message);
   };
 
-  // URL shortener check
+  // URL shortener check (on the original URL — the final URL is post-expansion)
   try {
-    result.details.shortenerCheck = await checkUrlShortener(url);
+    result.details.shortenerCheck = await checkUrlShortener(originalUrl);
 
     if (result.details.shortenerCheck.isShortener) {
       const domain = result.details.shortenerCheck.domain?.toLowerCase() || '';
@@ -247,116 +300,106 @@ export async function analyzeTier1(content: QRContent): Promise<HeuristicResult>
     addRecommendation(`Contains suspicious words: ${enhancedMatches.map(m => m.word).join(', ')}`);
   }
 
-  // Determine risk level for Tier 1
-  if (result.score >= 70) {
-    result.risk = 'high';
-  } else if (result.score >= 40) {
-    result.risk = 'medium';
-  } else {
-    result.risk = 'low';
-  }
-
+  result.risk = riskFor(result.score);
   result.recommendations = Array.from(recommendationSet);
   return result;
 }
 
 /**
- * Tier 2: Fast network checks with caching (100-300ms)
+ * Tier 2: local URLHaus cache lookup.
  *
- * These checks use network requests but leverage caching:
- * - Redirect expansion (first hop only)
- * - Local URLHaus cache lookup
+ * Checks every hostname in play (original URL, redirect hops, final URL) so a
+ * malicious host anywhere in the chain is caught. Never throws; a failed or
+ * slow lookup degrades to an empty contribution.
  */
-export async function analyzeTier2(content: QRContent, tier1Result: HeuristicResult): Promise<HeuristicResult> {
-  const result = { ...tier1Result };
+export async function collectTier2Signals(urls: string[]): Promise<SignalDelta> {
+  const delta = emptyDelta();
 
-  if (content.type !== 'url') {
-    return result;
-  }
-
-  const url = content.text;
-
-  // Check URLHaus local cache for known malicious hosts
   try {
     const { loadUrlhausHosts } = await import('./urlhaus');
-    const hosts = await loadUrlhausHosts();
+    const hosts = await withTimeout(loadUrlhausHosts(), TIER2_TIMEOUT_MS, null);
+    if (!hosts) {
+      return delta;
+    }
 
-    const hostname = new URL(url).hostname.toLowerCase();
-    const isMalicious = hosts.hosts.includes(hostname);
+    const hostSet = new Set(hosts.hosts);
+    const hostnames = new Set(urls.map(hostnameOf).filter((h): h is string => Boolean(h)));
+    const matched = Array.from(hostnames).filter((h) => hostSet.has(h));
 
-    if (isMalicious) {
-      result.details.threatIntel = {
-        urlhausMatches: 1,
+    if (matched.length > 0) {
+      delta.details.threatIntel = {
+        urlhausMatches: matched.length,
         isMalicious: true
       };
-      result.score += 80;
-      result.recommendations.push('This URL is listed in the URLHaus malware database.');
-      result.risk = 'high';
+      delta.scoreDelta += 80;
+      delta.recommendations.push('This URL is listed in the URLHaus malware database.');
     }
   } catch (_e) {
-    // URLHaus cache check failed, will be checked in Tier 3
+    // URLHaus cache check failed; the live Tier 3 lookup still runs
   }
 
-  return result;
+  return delta;
 }
 
 /**
- * Tier 3: Server-side API calls (200-500ms)
+ * Tier 3: server-side API calls (domain age, Google Safe Browsing, AbuseIPDB).
  *
- * These checks require server-side processing:
- * - Domain age verification
- * - Enhanced threat intelligence (Google Safe Browsing, AbuseIPDB)
- * - Full redirect chain expansion
+ * The underlying fetches carry their own AbortController timeouts (see api.ts)
+ * and this whole group is additionally bounded by TIER3_TIMEOUT_MS. Failures
+ * surface as "unable to determine" details so the UI shows the checks as
+ * completed-but-unknown rather than hanging.
  */
-export async function analyzeTier3(content: QRContent, tier2Result: HeuristicResult): Promise<HeuristicResult> {
-  const result = { ...tier2Result };
+export async function collectTier3Signals(url: string): Promise<SignalDelta> {
+  const delta = emptyDelta();
 
-  if (content.type !== 'url') {
-    return result;
-  }
+  const unavailable = () => {
+    delta.details.domainAge = {
+      age_days: null,
+      risk_points: 0,
+      message: 'Unable to determine domain age'
+    };
+    delta.details.enhancedThreatIntel = {
+      threat_detected: false,
+      risk_points: 0,
+      message: 'Unable to complete threat intelligence checks',
+      threats: [],
+      sources_checked: []
+    };
+  };
 
-  const url = content.text;
-
-  // Parallel threat intelligence checks
   try {
-    console.log('🔍 Tier 3: Starting threat intelligence checks for:', url);
     const { checkAllThreatIntel } = await import('./api');
-    const intelResults = await checkAllThreatIntel(url);
-    console.log('🔍 Tier 3: Received intel results:', intelResults);
+    const intelResults = await withTimeout(checkAllThreatIntel(url), TIER3_TIMEOUT_MS, null);
 
-    // Process domain age results - always add to details for UI display
+    if (!intelResults) {
+      unavailable();
+      return delta;
+    }
+
     if (intelResults.domainAge) {
-      result.details.domainAge = intelResults.domainAge;
-      if (intelResults.domainAge.risk_points > 0) {
-        result.score += intelResults.domainAge.risk_points;
-        result.recommendations.push(`Domain age: ${intelResults.domainAge.message}`);
-      }
-
-      // Update domain reputation with age information
-      if (result.details.domainReputation) {
-        result.details.domainReputation.isNewDomain = intelResults.domainAge.age_days !== null &&
-                                                        intelResults.domainAge.age_days < 30;
+      delta.details.domainAge = intelResults.domainAge;
+      if (intelResults.domainAge.risk_points !== 0) {
+        delta.scoreDelta += intelResults.domainAge.risk_points;
+        if (intelResults.domainAge.risk_points > 0) {
+          delta.recommendations.push(`Domain age: ${intelResults.domainAge.message}`);
+        }
       }
     } else {
-      // Domain age check failed - still add to details so UI shows it completed
-      result.details.domainAge = {
+      delta.details.domainAge = {
         age_days: null,
         risk_points: 0,
         message: 'Unable to determine domain age'
       };
     }
 
-    // Process enhanced threat intel results - always add to details for UI display
     if (intelResults.threatIntel) {
-      result.details.enhancedThreatIntel = intelResults.threatIntel;
-
+      delta.details.enhancedThreatIntel = intelResults.threatIntel;
       if (intelResults.threatIntel.threat_detected) {
-        result.score += intelResults.threatIntel.risk_points;
-        result.recommendations.push('Threat intelligence providers flagged this URL as malicious.');
+        delta.scoreDelta += intelResults.threatIntel.risk_points;
+        delta.recommendations.push('Threat intelligence providers flagged this URL as malicious.');
       }
     } else {
-      // Threat intel check failed - still add to details so UI shows it completed
-      result.details.enhancedThreatIntel = {
+      delta.details.enhancedThreatIntel = {
         threat_detected: false,
         risk_points: 0,
         message: 'No threats detected',
@@ -364,96 +407,116 @@ export async function analyzeTier3(content: QRContent, tier2Result: HeuristicRes
         sources_checked: []
       };
     }
-  } catch (e) {
-    // API calls failed - add default values so UI shows checks completed
-    console.error('❌ Tier 3 analysis failed:', e);
-    result.details.domainAge = {
-      age_days: null,
-      risk_points: 0,
-      message: 'Unable to determine domain age'
-    };
-    result.details.enhancedThreatIntel = {
-      threat_detected: false,
-      risk_points: 0,
-      message: 'Unable to complete threat intelligence checks',
-      threats: [],
-      sources_checked: []
+  } catch (_e) {
+    unavailable();
+  }
+
+  return delta;
+}
+
+/**
+ * Merge tier deltas onto the tier-1 base, recomputing score and risk.
+ * The score is clamped to 0..100 (established-domain signals may be negative).
+ */
+export function applyDeltas(base: HeuristicResult, deltas: Array<SignalDelta | null>): HeuristicResult {
+  const result: HeuristicResult = {
+    risk: base.risk,
+    score: base.score,
+    details: { ...base.details },
+    recommendations: [...base.recommendations]
+  };
+
+  for (const delta of deltas) {
+    if (!delta) continue;
+    result.score += delta.scoreDelta;
+    Object.assign(result.details, delta.details);
+    result.recommendations.push(...delta.recommendations);
+  }
+
+  result.score = Math.max(0, Math.min(100, result.score));
+
+  const age = result.details.domainAge;
+  if (age && result.details.domainReputation) {
+    result.details.domainReputation = {
+      ...result.details.domainReputation,
+      isNewDomain: age.age_days !== null && age.age_days < 30
     };
   }
 
-  console.log('🔍 Tier 3: Final result.details:', {
-    domainAge: result.details.domainAge,
-    enhancedThreatIntel: result.details.enhancedThreatIntel
-  });
-
-  // Final risk calculation
-  if (result.score >= 70) {
-    result.risk = 'high';
-  } else if (result.score >= 40) {
-    result.risk = 'medium';
-  } else {
-    result.risk = 'low';
-  }
-
+  result.risk = riskFor(result.score);
   return result;
 }
 
 /**
- * Progressive heuristics analyzer - yields results as each tier completes
+ * Progressive heuristics analyzer — yields results as each tier completes.
+ *
+ * Tier 1 yields immediately; Tiers 2 and 3 are started together and merged in
+ * completion order, so a slow Tier 3 never delays the Tier 2 result (or vice
+ * versa).
  */
-export async function* analyzeHeuristicsTiered(content: QRContent): AsyncGenerator<TieredHeuristicResult, void, undefined> {
-  // Yield Tier 1 immediately
-  const tier1 = await analyzeTier1(content);
+export async function* analyzeHeuristicsTiered(
+  content: QRContent,
+  options: AnalysisOptions = {}
+): AsyncGenerator<TieredHeuristicResult, void, undefined> {
+  const tier1 = await analyzeTier1(content, options);
   yield {
     tier1,
     tier2: null,
     tier3: null,
-    verdict: calculateVerdict(tier1, null, null),
+    verdict: verdictFor(tier1),
     isComplete: false
   };
 
-  // Yield Tier 2 when ready
-  const tier2 = await analyzeTier2(content, tier1);
-  yield {
-    tier1,
-    tier2,
-    tier3: null,
-    verdict: calculateVerdict(tier1, tier2, null),
-    isComplete: false
-  };
+  if (content.type !== 'url') {
+    // Non-URL payloads have no network tiers; finalize immediately.
+    yield {
+      tier1,
+      tier2: tier1,
+      tier3: tier1,
+      verdict: verdictFor(tier1),
+      isComplete: true
+    };
+    return;
+  }
 
-  // Yield Tier 3 when ready (final result)
-  const tier3 = await analyzeTier3(content, tier2);
-  yield {
-    tier1,
-    tier2,
-    tier3,
-    verdict: calculateVerdict(tier1, tier2, tier3),
-    isComplete: true
-  };
+  const effectiveUrl = options.finalUrl || content.text;
+  const urlsInPlay = Array.from(new Set([content.text, effectiveUrl, ...(options.redirectChain ?? [])]));
+
+  // Start both tiers at once — the concurrency harness. Each resolves to its
+  // delta (never rejects), tagged so results merge in completion order.
+  const pending = new Map<2 | 3, Promise<{ tier: 2 | 3; delta: SignalDelta }>>([
+    [2, collectTier2Signals(urlsInPlay).then((delta) => ({ tier: 2 as const, delta }))],
+    [3, collectTier3Signals(effectiveUrl).then((delta) => ({ tier: 3 as const, delta }))]
+  ]);
+
+  let tier2Delta: SignalDelta | null = null;
+  let tier3Delta: SignalDelta | null = null;
+
+  while (pending.size > 0) {
+    const settled = await Promise.race(pending.values());
+    pending.delete(settled.tier);
+    if (settled.tier === 2) {
+      tier2Delta = settled.delta;
+    } else {
+      tier3Delta = settled.delta;
+    }
+
+    const cumulative = applyDeltas(tier1, [tier2Delta, tier3Delta]);
+    yield {
+      tier1,
+      tier2: tier2Delta ? applyDeltas(tier1, [tier2Delta]) : null,
+      tier3: tier3Delta ? cumulative : null,
+      verdict: verdictFor(cumulative),
+      isComplete: pending.size === 0
+    };
+  }
 }
 
-/**
- * Calculate overall verdict based on available tier results
- */
-function calculateVerdict(
-  tier1: HeuristicResult | null,
-  tier2: HeuristicResult | null,
-  tier3: HeuristicResult | null
-): 'safe' | 'caution' | 'danger' | 'analyzing' {
-  const latestResult = tier3 || tier2 || tier1;
-
-  if (!latestResult) {
-    return 'analyzing';
-  }
-
-  if (latestResult.risk === 'high') {
-    return 'danger';
-  } else if (latestResult.risk === 'medium') {
-    return 'caution';
-  } else {
-    return 'safe';
-  }
+function verdictFor(result: HeuristicResult | null): 'safe' | 'caution' | 'danger' | 'analyzing' {
+  if (!result) return 'analyzing';
+  if (result.risk === 'high') return 'danger';
+  if (result.risk === 'medium') return 'caution';
+  return 'safe';
 }
 
 /**

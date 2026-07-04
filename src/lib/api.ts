@@ -2,6 +2,23 @@ const base = import.meta.env.VITE_API_BASE;
 
 const KNOWN_SHORTENERS = ['bit.ly', 'tinyurl.com', 't.co', 'qrco.de', 'buff.ly', 'goo.gl', 'ow.ly', 'tiny.cc'];
 
+// Per-signal timeouts (P3 harness): every network signal is individually
+// bounded so one hung call degrades to "unknown" instead of blocking the verdict.
+const RESOLVE_TIMEOUT_MS = 12_000; // server itself deadlines at 10s
+const INTEL_TIMEOUT_MS = 6_500;
+const DOMAIN_AGE_TIMEOUT_MS = 6_500;
+const THREAT_INTEL_TIMEOUT_MS = 8_000; // server-side GSB/AbuseIPDB calls timeout at 6s
+
+async function fetchWithTimeout(input: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export interface ResolveResponse {
   hops: string[];
   final: string;
@@ -67,11 +84,11 @@ export async function resolveChain(url: string): Promise<ResolveResponse> {
 
 async function resolveWithNetlifyFunction(url: string): Promise<ResolveResponse | null> {
   try {
-    const response = await fetch('/api/resolve', {
+    const response = await fetchWithTimeout('/api/resolve', {
       method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'application/json' },
       body: JSON.stringify({ url })
-    });
+    }, RESOLVE_TIMEOUT_MS);
 
     if (!response.ok) {
       throw new Error(`Netlify function returned ${response.status}`);
@@ -193,11 +210,11 @@ async function resolveChainLocally(url: string): Promise<ResolveResponse> {
 export async function intel(url: string): Promise<IntelResponse> {
   try {
     // First try the live API lookup
-    const response = await fetch('/.netlify/functions/intel-urlhaus', {
+    const response = await fetchWithTimeout('/.netlify/functions/intel-urlhaus', {
       method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'application/json' },
       body: JSON.stringify({ url })
-    });
+    }, INTEL_TIMEOUT_MS);
 
     if (response.ok) {
       const data = await response.json();
@@ -264,11 +281,11 @@ export interface AllThreatIntelResults {
  * Check domain age via Netlify Function
  */
 async function checkDomainAge(domain: string): Promise<DomainAgeResult> {
-  const response = await fetch('/.netlify/functions/check-domain-age', {
+  const response = await fetchWithTimeout('/.netlify/functions/check-domain-age', {
     method: 'POST',
     body: JSON.stringify({ domain }),
     headers: { 'Content-Type': 'application/json' }
-  });
+  }, DOMAIN_AGE_TIMEOUT_MS);
 
   if (!response.ok) {
     throw new Error(`Domain age check failed: ${response.status}`);
@@ -281,11 +298,11 @@ async function checkDomainAge(domain: string): Promise<DomainAgeResult> {
  * Check enhanced threat intelligence via Netlify Function
  */
 async function checkThreatIntel(domain: string, url: string): Promise<ThreatIntelResult> {
-  const response = await fetch('/.netlify/functions/check-threat-intel', {
+  const response = await fetchWithTimeout('/.netlify/functions/check-threat-intel', {
     method: 'POST',
     body: JSON.stringify({ domain, url }),
     headers: { 'Content-Type': 'application/json' }
-  });
+  }, THREAT_INTEL_TIMEOUT_MS);
 
   if (!response.ok) {
     throw new Error(`Threat intel check failed: ${response.status}`);
