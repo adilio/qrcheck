@@ -122,7 +122,13 @@ membership.
   lookups are constant-time; if a Bloom filter is used, its false-positive rate is
   documented and acceptable; StaleWhileRevalidate still refreshes it.
 
-### P3. Parallelize + bound Tier-3 signals
+### ✅ P3. Parallelize + bound Tier-3 signals — DONE (a06c9de)
+
+> Shipped: Tier 2 and Tier 3 run concurrently via a signal-delta harness in
+> `heuristics-tiered.ts`; every network call in `api.ts` has its own
+> AbortController timeout; hung/failed signals degrade to "unknown"; the live
+> URLHaus lookup runs concurrently with the tiered analysis; 13 unit tests
+> cover ordering, timeout, and degradation. F1/F2 signals attach here.
 
 Tier-3 runs several independent network checks (Safe Browsing, URLHaus, redirect
 resolve, domain age). Run them concurrently with `Promise.allSettled` and per-signal
