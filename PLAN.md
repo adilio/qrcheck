@@ -20,12 +20,14 @@ the remaining security gaps, and performance work on what's left.**
 
 ## Prerequisite decision (blocks clean F1/F2)
 
-- **Signal model — adopt or drop (`#15`).** The tiered engine
-  (`heuristics-tiered.ts`) is live; the designed-but-unused
-  `UrlSignals`/`analyzeUrl` model is dead. Both new signals below attach to
-  whichever model wins. **Recommendation: commit to the tiered engine** unless
-  there's a concrete reason to revive `UrlSignals`. Resolve this first so signals
-  land once, not twice.
+- ✅ **Signal model — DECIDED: committed to the tiered engine (`#15`).** The tiered
+  engine (`heuristics-tiered.ts`) is live and feature-complete; the
+  `UrlSignals`/`analyzeUrl` model was already deleted in the YAGNI cleanup. The
+  last remnants of the non-tiered path — `src/lib/expand.ts` (client-side
+  expansion, dead since resolution moved to the Netlify function),
+  `src/lib/domainAge.ts` (dead client RDAP wrapper), `src/types.ts`
+  (`RedirectExpansion` types used only by `expand.ts`) — are removed. All new
+  signals (F1–F3) attach to the tiered engine.
 
 ## Real functionality
 
