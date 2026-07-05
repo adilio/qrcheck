@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from 'svelte';
   import { DEV_ENABLE_MANUAL_URL } from './lib/flags';
-  import { decodeQRFromFile, decodeQRFromImageData, parseQRContent, type QRContent } from './lib/decode';
+  import { decodeQRFromFile, decodeQRFromImageData, ensureDecoderLoaded, parseQRContent, type QRContent } from './lib/decode';
   import {
     formatHeuristicResults,
     type CheckStatus,
@@ -832,6 +832,9 @@
         throw new Error('Camera capture is not supported by this browser.');
       }
       // Request persistent camera permissions with more specific constraints
+      // Fetch the lazy decoder chunk while the camera permission prompt /
+      // stream negotiation happens — by the first frame it's usually ready.
+      void ensureDecoderLoaded();
       stream = await startCamera();
       scanning = true;
       flow = 'scanning';

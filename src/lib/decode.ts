@@ -1,4 +1,23 @@
-import jsQR from 'jsqr';
+// jsqr is ~252 KB — the bulk of the bundle — but only needed when an image is
+// actually scanned, not when pasting a URL. It's dynamic-imported on first use.
+type JsQR = typeof import('jsqr').default;
+
+let jsQR: JsQR | null = null;
+let jsQRLoading: Promise<JsQR> | null = null;
+
+/**
+ * Load the QR decoder chunk. Call ahead of time (camera start, file select)
+ * so the synchronous per-frame decode path never has to wait.
+ */
+export function ensureDecoderLoaded(): Promise<JsQR> {
+  if (!jsQRLoading) {
+    jsQRLoading = import('jsqr').then((module) => {
+      jsQR = module.default;
+      return jsQR;
+    });
+  }
+  return jsQRLoading;
+}
 
 export interface QRContent {
   type: 'url' | 'text' | 'email' | 'phone' | 'sms' | 'wifi' | 'vcard' | 'geo' | 'unknown';
@@ -20,6 +39,11 @@ export interface QRContent {
 }
 
 export function decodeQRFromImageData(image: ImageData): string {
+  if (!jsQR) {
+    // Camera frames can arrive before the lazy chunk lands; the scan loop
+    // treats this like any other frame without a code and retries.
+    throw new Error('QR decoder is still loading');
+  }
   const code = jsQR(image.data, image.width, image.height);
   if (!code) {
     throw new Error('No QR code found');
@@ -28,6 +52,9 @@ export function decodeQRFromImageData(image: ImageData): string {
 }
 
 export async function decodeQRFromFile(file: File): Promise<string> {
+  // Kick off the decoder download in parallel with image validation/bitmap work
+  const decoderReady = ensureDecoderLoaded();
+
   // Validate file type and size
   if (!file.type.startsWith('image/')) {
     throw new Error('Please select an image file');
@@ -68,6 +95,8 @@ export async function decodeQRFromFile(file: File): Promise<string> {
   if (!ctx) {
     throw new Error('Canvas 2D context unavailable');
   }
+
+  await decoderReady;
 
   try {
     // Draw the image and try multiple approaches for better QR detection

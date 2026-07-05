@@ -146,7 +146,14 @@ Instead, detect every URL in the payload and let the user choose which to analyz
 
 ## Performance
 
-### P1. Lazy-load the QR decoder (`jsqr`)
+### ✅ P1. Lazy-load the QR decoder (`jsqr`) — DONE
+
+> Shipped: jsqr is dynamic-imported on first use (`ensureDecoderLoaded`),
+> prefetched in parallel with camera permission / file validation so scans
+> don't stall. Measured in `vite build`: initial JS 255.6→139.7 KB raw
+> (89.7→47.4 KB gzip); jsqr is its own 130.8 KB lazy chunk.
+
+### P1 (original spec). Lazy-load the QR decoder (`jsqr`)
 
 `jsqr` (~252 KB, the bulk of the shipped bundle) loads on every visit but is only
 needed when a user *scans an image* — not when pasting a URL. Dynamic-import it on
