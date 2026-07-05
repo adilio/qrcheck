@@ -22,6 +22,9 @@ async function fetchWithTimeout(input: string, init: RequestInit, timeoutMs: num
 export interface ResolveResponse {
   hops: string[];
   final: string;
+  /** True when the chain may be incomplete (loop, timeout, hop cap, blocked). */
+  partial?: boolean;
+  reason?: string;
 }
 
 export interface ResolveAnalysisResponse {
@@ -31,6 +34,8 @@ export interface ResolveAnalysisResponse {
     redirect_chain: string[];
     resolved_url: string;
     hop_count: number;
+    partial?: boolean;
+    reason?: string;
   };
   error?: string;
 }
@@ -102,7 +107,9 @@ async function resolveWithNetlifyFunction(url: string): Promise<ResolveResponse 
 
     return {
       hops: data.analysis.redirect_chain,
-      final: data.analysis.resolved_url
+      final: data.analysis.resolved_url,
+      partial: data.analysis.partial,
+      reason: data.analysis.reason
     };
   } catch (err) {
     console.warn('Netlify function resolution failed:', err);

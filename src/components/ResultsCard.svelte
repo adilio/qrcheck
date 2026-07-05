@@ -6,6 +6,7 @@
   export let verdict: 'safe' | 'caution' | 'danger' | 'analyzing';
   export let finalUrl: string = '';
   export let redirectChain: string[] = [];
+  export let redirectPartial: boolean = false;
   export let tier1Complete: boolean = false;
   export let tier2Complete: boolean = false;
   export let tier3Complete: boolean = false;
@@ -51,6 +52,29 @@
   $: config = verdictConfig[verdict];
   $: allChecksComplete = tier1Complete && tier2Complete && tier3Complete;
   $: showSpinner = verdict === 'analyzing' || !tier1Complete;
+
+  // Continue-to-site (verdict-gated): a safe verdict gets a normal open
+  // button; a flagged verdict never one-click-launches — copy is primary and
+  // opening requires an explicit second confirmation step.
+  let confirmOpen = false;
+  let copiedUrl = false;
+  let copyTimer: ReturnType<typeof setTimeout> | null = null;
+
+  $: if (finalUrl || verdict) {
+    // Reset the confirm step whenever the analyzed URL or verdict changes
+    confirmOpen = false;
+  }
+
+  async function copyFinalUrl() {
+    try {
+      await navigator.clipboard.writeText(finalUrl);
+      copiedUrl = true;
+      if (copyTimer) clearTimeout(copyTimer);
+      copyTimer = setTimeout(() => (copiedUrl = false), 2000);
+    } catch (_e) {
+      // Clipboard unavailable (permissions/insecure context) — leave the URL visible for manual copy
+    }
+  }
 </script>
 
 <div class="results-card">
@@ -76,7 +100,12 @@
   <!-- Redirect Chain (if applicable) -->
   {#if redirectChain.length > 1}
     <div class="section redirect-section">
-      <h4 class="section-title">📍 Final Destination</h4>
+      <h4 class="section-title">
+        🔗 Redirect Chain ({redirectChain.length - 1} {redirectChain.length === 2 ? 'hop' : 'hops'})
+        {#if redirectPartial}
+          <span class="status-badge warn">⚠️ May be incomplete</span>
+        {/if}
+      </h4>
       <div class="redirect-tree">
         {#each redirectChain as hop, i}
           <div
@@ -198,10 +227,60 @@
     </div>
   {/if}
 
-  {#if finalUrl}
-    <div class="section">
+  {#if finalUrl && verdict !== 'analyzing'}
+    <div class="section continue-section">
       <h4 class="section-title">🎯 Final Destination</h4>
       <p class="final-url">{finalUrl}</p>
+
+      {#if verdict === 'safe'}
+        <div class="continue-actions">
+          <a
+            class="continue-btn open safe"
+            href={finalUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Open site ↗
+          </a>
+          <button class="continue-btn copy" type="button" on:click={copyFinalUrl}>
+            {copiedUrl ? '✅ Copied' : '📋 Copy URL'}
+          </button>
+        </div>
+      {:else}
+        <p class="continue-warning">
+          {#if verdict === 'danger'}
+            This link was flagged as high risk. Opening it from here is disabled — copy the
+            address only if you need to inspect it elsewhere.
+          {:else}
+            This link was flagged. Prefer copying the address and verifying it before visiting.
+          {/if}
+        </p>
+        <div class="continue-actions">
+          <button class="continue-btn copy primary" type="button" on:click={copyFinalUrl}>
+            {copiedUrl ? '✅ Copied' : '📋 Copy URL'}
+          </button>
+          {#if verdict === 'caution'}
+            {#if !confirmOpen}
+              <button class="continue-btn open risky" type="button" on:click={() => (confirmOpen = true)}>
+                Open anyway…
+              </button>
+            {:else}
+              <a
+                class="continue-btn open risky confirm"
+                href={finalUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                on:click={() => (confirmOpen = false)}
+              >
+                ⚠️ Yes, open the flagged site ↗
+              </a>
+              <button class="continue-btn cancel" type="button" on:click={() => (confirmOpen = false)}>
+                Cancel
+              </button>
+            {/if}
+          {/if}
+        </div>
+      {/if}
     </div>
   {/if}
 
@@ -427,6 +506,72 @@
     color: #374151;
     word-break: break-all;
     font-weight: 600;
+  }
+
+  .continue-warning {
+    margin: 10px 0 0 0;
+    font-size: 0.9rem;
+    color: #b45309;
+  }
+
+  .continue-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  .continue-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 16px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    transition: filter 0.15s ease;
+  }
+
+  .continue-btn:hover {
+    filter: brightness(0.95);
+  }
+
+  .continue-btn.open.safe {
+    background: #2e7d32;
+    color: #fff;
+  }
+
+  .continue-btn.copy {
+    background: #eceff1;
+    color: #263238;
+    border-color: #cfd8dc;
+  }
+
+  .continue-btn.copy.primary {
+    background: #1565c0;
+    color: #fff;
+    border-color: transparent;
+  }
+
+  .continue-btn.open.risky {
+    background: transparent;
+    color: #b45309;
+    border-color: #f59e0b;
+  }
+
+  .continue-btn.open.risky.confirm {
+    background: #b45309;
+    color: #fff;
+    border-color: transparent;
+  }
+
+  .continue-btn.cancel {
+    background: transparent;
+    color: #607d8b;
+    border-color: #cfd8dc;
   }
 
   .dot-pulse {

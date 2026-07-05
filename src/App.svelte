@@ -134,6 +134,7 @@
   let formattedHeuristics: FormattedHeuristicSummary | null = null;
   let hops: string[] = [];
   let redirectExpansionBlocked = false;
+  let redirectPartial = false;
   let intelRes: IntelResponse | null = null;
   let flaggedChecks: FormattedHeuristicCheck[] = [];
   let error = '';
@@ -298,6 +299,7 @@
     formattedHeuristics = null;
     hops = [];
     redirectExpansionBlocked = false;
+    redirectPartial = false;
     intelRes = null;
     originalInputUrl = '';
     learnMoreOpen = false;
@@ -742,6 +744,7 @@
       const redirectResult = await resolveChain(raw);
       hops = redirectResult.hops;
       urlText = redirectResult.final;
+      redirectPartial = Boolean(redirectResult.partial);
 
       // Check if redirect expansion was blocked (only one hop means no expansion happened)
       redirectExpansionBlocked = isKnownShortener && hops.length === 1;
@@ -1631,6 +1634,7 @@
           verdict={progressiveVerdict}
           finalUrl={urlText}
           redirectChain={hops}
+          redirectPartial={redirectPartial}
           tier1Complete={tier1Complete}
           tier2Complete={tier2Complete}
           tier3Complete={tier3Complete}

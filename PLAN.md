@@ -31,7 +31,19 @@ the remaining security gaps, and performance work on what's left.**
 
 ## Real functionality
 
-### F1. Redirect-chain expansion (`#13`) — highest correctness value
+### ✅ F1. Redirect-chain expansion (`#13`) — DONE
+
+> Shipped: `functions/resolve.ts` refactored around a testable
+> `followRedirectChain` — loop detection, per-hop + overall timeouts, hop cap,
+> mid-chain SSRF blocking, and partial chains returned with a `reason` instead
+> of throwing. The client analyzes the resolved final URL (P3 plumbing), shows
+> the hop chain with a "may be incomplete" badge on partial results, and the
+> verdict-gated continue-to-site action (`#11`) landed in ResultsCard: safe →
+> "Open site"; caution → copy-first + explicit two-step "Open anyway"; danger →
+> copy only. 8 resolver unit tests cover loop/timeout/max-hop/SSRF; verified
+> live against bit.ly and tinyurl.
+
+### F1 (original spec). Redirect-chain expansion (`#13`) — highest correctness value
 
 Unroll shortened/redirecting URLs so the verdict reflects the *final* destination,
 not the shortener. Today it's CORS-blocked in the browser and no-op'd; resolution

@@ -17,7 +17,10 @@ const PRIVATE_IP_RANGES = [
   /^172\.(1[6-9]|2[0-9]|3[0-1])\./, // 172.16.0.0/12 (private)
   /^192\.168\./,      // 192.168.0.0/16 (private)
   /^169\.254\./,      // 169.254.0.0/16 (link-local)
+  /^0\./,             // 0.0.0.0/8
+  /^localhost$/i,
   /^::1$/,            // IPv6 loopback
+  /^\[::1\]$/,
   /^fe80:/,           // IPv6 link-local
   /^fc00:/,           // IPv6 unique local
 ];
@@ -27,8 +30,7 @@ function isHttpUrl(u: string) {
   catch { return false; }
 }
 
-function isPrivateIP(hostname: string): boolean {
-  // Check if hostname is an IP address and if it's private
+export function isPrivateHost(hostname: string): boolean {
   return PRIVATE_IP_RANGES.some(range => range.test(hostname));
 }
 
@@ -51,7 +53,7 @@ function checkRateLimit(clientIP: string): { allowed: boolean; resetTime?: numbe
   return { allowed: true };
 }
 
-function getClientIP(event: { headers: Record<string, string> }): string {
+function getClientIP(event: { headers: Record<string, string | undefined> }): string {
   // Netlify provides the client IP in various headers
   return event.headers['x-nf-client-connection-ip'] ||
          event.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
@@ -59,32 +61,85 @@ function getClientIP(event: { headers: Record<string, string> }): string {
          'unknown';
 }
 
-async function resolveChain(url: string, startTime: number): Promise<{ resolvedUrl: string; hops: string[] }> {
+/** Why the chain stopped early. Absent when the final destination was reached. */
+export type ChainStopReason = 'redirect_loop' | 'max_hops' | 'timeout' | 'blocked' | 'network_error';
+
+export interface ChainResult {
+  resolvedUrl: string;
+  hops: string[];
+  /** True when the chain may be incomplete (stopped before a final 2xx/4xx). */
+  partial: boolean;
+  reason?: ChainStopReason;
+}
+
+export interface ChainOptions {
+  maxHops?: number;
+  perHopTimeoutMs?: number;
+  overallDeadlineMs?: number;
+}
+
+function normalize(url: string): string {
+  try {
+    const u = new URL(url);
+    u.hash = '';
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Follow an HTTP redirect chain server-side and return the ordered hops.
+ *
+ * Every stop condition returns the partial chain gathered so far (with a
+ * `reason`) rather than throwing — a shortener that loops or times out should
+ * still surface the hops we did see. Every hop is treated as untrusted:
+ * private/internal destinations stop the chain (SSRF), response bodies are
+ * never downloaded (HEAD first, then a 1-byte ranged GET), and hops are capped.
+ */
+export async function followRedirectChain(url: string, options: ChainOptions = {}): Promise<ChainResult> {
+  const maxHops = options.maxHops ?? MAX_HOPS;
+  const perHopTimeout = options.perHopTimeoutMs ?? TIMEOUT_MS;
+  const overallDeadline = options.overallDeadlineMs ?? OVERALL_DEADLINE_MS;
+
+  const startTime = Date.now();
   const hops: string[] = [];
+  const visited = new Set<string>();
   let current = url;
 
-  for (let i = 0; i < MAX_HOPS; i++) {
-    // Check overall deadline
-    if (Date.now() - startTime > OVERALL_DEADLINE_MS) {
-      throw new Error("Overall deadline exceeded");
+  for (let i = 0; i <= maxHops; i++) {
+    if (i === maxHops) {
+      return { resolvedUrl: current, hops, partial: true, reason: 'max_hops' };
     }
 
-    // Parse URL and check for private IPs
+    if (Date.now() - startTime > overallDeadline) {
+      return { resolvedUrl: current, hops, partial: true, reason: 'timeout' };
+    }
+
     let urlObj: URL;
     try {
       urlObj = new URL(current);
     } catch {
-      return { resolvedUrl: current, hops };
+      return { resolvedUrl: current, hops, partial: true, reason: 'network_error' };
     }
 
-    // SSRF protection: block private/internal IPs
-    if (isPrivateIP(urlObj.hostname)) {
-      throw new Error("Resolution to private IP addresses is not allowed");
+    // SSRF protection: never fetch private/internal hosts. The offending hop
+    // is still recorded so the user can see where the chain was heading.
+    if (isPrivateHost(urlObj.hostname)) {
+      hops.push(current);
+      return { resolvedUrl: current, hops, partial: true, reason: 'blocked' };
     }
 
+    // Redirect loop detection
+    const normalized = normalize(current);
+    if (visited.has(normalized)) {
+      return { resolvedUrl: current, hops, partial: true, reason: 'redirect_loop' };
+    }
+    visited.add(normalized);
     hops.push(current);
+
     const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+    const to = setTimeout(() => ctrl.abort(), perHopTimeout);
 
     try {
       // First try HEAD request to get headers only
@@ -119,22 +174,26 @@ async function resolveChain(url: string, startTime: number): Promise<{ resolvedU
         continue;
       }
 
-      return { resolvedUrl: current, hops };
+      // Reached a non-redirect response: this is the final destination.
+      return { resolvedUrl: current, hops, partial: false };
     } catch (error) {
       clearTimeout(to);
-      if (error instanceof Error && error.message === "Overall deadline exceeded") {
-        throw error;
-      }
-      return { resolvedUrl: current, hops };
+      // DOMException is not `instanceof Error` on every runtime — match by name
+      const aborted = typeof error === 'object' && error !== null &&
+        (error as { name?: string }).name === 'AbortError';
+      return {
+        resolvedUrl: current,
+        hops,
+        partial: true,
+        reason: aborted ? 'timeout' : 'network_error'
+      };
     }
   }
 
-  return { resolvedUrl: current, hops };
+  return { resolvedUrl: current, hops, partial: true, reason: 'max_hops' };
 }
 
 export const handler: Handler = async (event) => {
-  const startTime = Date.now();
-
   try {
     // Rate limiting check
     const clientIP = getClientIP(event);
@@ -146,7 +205,7 @@ export const handler: Handler = async (event) => {
         headers: {
           "content-type": "application/json",
           "retry-after": Math.ceil((rateLimitResult.resetTime! - Date.now()) / 1000).toString()
-        },
+        } as Record<string, string>,
         body: JSON.stringify({
           ok: false,
           error: "Rate limit exceeded",
@@ -161,12 +220,21 @@ export const handler: Handler = async (event) => {
     if (!url || typeof url !== "string" || !isHttpUrl(url) || url.length > 2048) {
       return {
         statusCode: 400,
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json" } as Record<string, string>,
         body: JSON.stringify({ ok: false, error: "Invalid URL format or length" })
       };
     }
 
-    const { resolvedUrl, hops } = await resolveChain(url, startTime);
+    // Reject private/internal input outright (SSRF)
+    if (isPrivateHost(new URL(url).hostname)) {
+      return {
+        statusCode: 400,
+        headers: { "content-type": "application/json" } as Record<string, string>,
+        body: JSON.stringify({ ok: false, error: "Resolution of private addresses is not allowed" })
+      };
+    }
+
+    const { resolvedUrl, hops, partial, reason } = await followRedirectChain(url);
 
     return {
       statusCode: 200,
@@ -174,14 +242,16 @@ export const handler: Handler = async (event) => {
         "content-type": "application/json",
         "cache-control": "no-store, no-cache, must-revalidate",
         "pragma": "no-cache"
-      },
+      } as Record<string, string>,
       body: JSON.stringify({
         ok: true,
         analysis: {
           input_url: url,
           redirect_chain: hops,
           resolved_url: resolvedUrl,
-          hop_count: hops.length
+          hop_count: hops.length,
+          partial,
+          ...(reason ? { reason } : {})
         }
       })
     };
@@ -192,7 +262,7 @@ export const handler: Handler = async (event) => {
 
     return {
       statusCode: statusCode,
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json" } as Record<string, string>,
       body: JSON.stringify({
         ok: false,
         error: errorMessage
