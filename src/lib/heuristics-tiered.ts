@@ -323,15 +323,14 @@ export async function collectTier2Signals(urls: string[]): Promise<SignalDelta> 
   const delta = emptyDelta();
 
   try {
-    const { loadUrlhausHosts } = await import('./urlhaus');
-    const hosts = await withTimeout(loadUrlhausHosts(), TIER2_TIMEOUT_MS, null);
-    if (!hosts) {
+    const { loadUrlhausBloom } = await import('./urlhaus');
+    const filter = await withTimeout(loadUrlhausBloom(), TIER2_TIMEOUT_MS, null);
+    if (!filter) {
       return delta;
     }
 
-    const hostSet = new Set(hosts.hosts);
     const hostnames = new Set(urls.map(hostnameOf).filter((h): h is string => Boolean(h)));
-    const matched = Array.from(hostnames).filter((h) => hostSet.has(h));
+    const matched = Array.from(hostnames).filter((h) => filter.has(h));
 
     if (matched.length > 0) {
       delta.details.threatIntel = {

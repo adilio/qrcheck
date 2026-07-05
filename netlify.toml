@@ -21,9 +21,9 @@
   to = "/.netlify/functions/:splat"
   status = 200
 
-# Bulk URLHaus hosts cache policy
+# URLHaus bloom-filter cache policy
 [[headers]]
-  for = "/urlhaus/hosts.json"
+  for = "/urlhaus/bloom.json"
   [headers.values]
     Cache-Control = "public, max-age=3600, must-revalidate"
     Netlify-CDN-Cache-Control = "public, s-maxage=86400, stale-while-revalidate=600"

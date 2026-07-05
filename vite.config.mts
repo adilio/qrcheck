@@ -62,9 +62,9 @@ export default defineConfig(({ command }) => ({
       workbox: {
         globPatterns: ['**/*.{js,css,html,png,svg,json}'],
         // Keep these out of the precache: share-card.png is a large social-share
-        // image with no offline need, and urlhaus/hosts.json is already fetched at
+        // image with no offline need, and urlhaus/bloom.json is already fetched at
         // runtime via StaleWhileRevalidate (precaching it ships the DB twice).
-        globIgnores: ['**/share-card.png', '**/urlhaus/hosts.json'],
+        globIgnores: ['**/share-card.png', '**/urlhaus/bloom.json'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/.*\.json$/,
@@ -78,7 +78,7 @@ export default defineConfig(({ command }) => ({
             }
           },
           {
-            urlPattern: /urlhaus\/hosts\.json/,
+            urlPattern: /urlhaus\/bloom\.json/,
             handler: 'StaleWhileRevalidate',
             options: {
               cacheName: 'urlhaus-data',

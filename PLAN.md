@@ -163,7 +163,18 @@ first scan.
   works (first scan may show a brief "loading decoder"); the split is confirmed in
   `vite build` output.
 
-### P2. Compact URLHaus lookup
+### ✅ P2. Compact URLHaus lookup — DONE
+
+> Shipped: `scripts/prebuild.mjs` now emits a Bloom filter
+> (`public/urlhaus/bloom.json`, ~26 KB) instead of the raw host list (352 KB) —
+> 93% smaller, O(k) membership probes. One shared hashing module
+> (`scripts/bloom.mjs`, FNV-1a + murmur3 finalizer) is imported by both the
+> builder and the client so they can't drift. FPR designed at 1e-4 and
+> test-measured (<5e-4 asserted over 100k probes); false positives are
+> re-checked by the live URLHaus API; false negatives impossible.
+> StaleWhileRevalidate + netlify.toml headers updated to bloom.json.
+
+### P2 (original spec). Compact URLHaus lookup
 
 The URLHaus host DB ships as a **352 KB `public/urlhaus/hosts.json`** fetched at
 runtime and checked client-side per lookup. Replace it with a compact index

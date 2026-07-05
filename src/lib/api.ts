@@ -235,14 +235,13 @@ export async function intel(url: string): Promise<IntelResponse> {
     console.warn('URLHaus live lookup failed:', error);
   }
 
-  // Fallback to local cache check
+  // Fallback to the local compact filter
   try {
-    const { loadUrlhausHosts } = await import('./urlhaus');
-    const hosts = await loadUrlhausHosts();
+    const { loadUrlhausBloom } = await import('./urlhaus');
+    const filter = await loadUrlhausBloom();
 
-    // Extract hostname from URL for local cache lookup
     const hostname = new URL(url).hostname.toLowerCase();
-    const isMalicious = hosts.hosts.includes(hostname);
+    const isMalicious = filter.has(hostname);
 
     return {
       urlhaus: {

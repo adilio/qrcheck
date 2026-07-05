@@ -12,7 +12,7 @@ vi.mock('../../src/lib/api', () => ({
 }));
 
 vi.mock('../../src/lib/urlhaus', () => ({
-  loadUrlhausHosts: vi.fn()
+  loadUrlhausBloom: vi.fn()
 }));
 
 vi.mock('../../src/lib/shortener', () => ({
@@ -20,11 +20,16 @@ vi.mock('../../src/lib/shortener', () => ({
 }));
 
 import { checkAllThreatIntel } from '../../src/lib/api';
-import { loadUrlhausHosts } from '../../src/lib/urlhaus';
+import { loadUrlhausBloom } from '../../src/lib/urlhaus';
+import type { UrlhausBloom } from '../../src/lib/bloom';
 import { checkUrlShortener } from '../../src/lib/shortener';
 
 const mockedIntel = vi.mocked(checkAllThreatIntel);
-const mockedHosts = vi.mocked(loadUrlhausHosts);
+const mockedHosts = vi.mocked(loadUrlhausBloom);
+
+function fakeFilter(listed: string[]): UrlhausBloom {
+  return { has: (host: string) => listed.includes(host) } as unknown as UrlhausBloom;
+}
 const mockedShortener = vi.mocked(checkUrlShortener);
 
 function urlContent(url: string): QRContent {
@@ -46,7 +51,7 @@ function cleanIntel() {
 
 beforeEach(() => {
   mockedShortener.mockResolvedValue({ isShortener: false, domain: null, knownServices: [] });
-  mockedHosts.mockResolvedValue({ updatedAt: '', count: 0, hosts: [] });
+  mockedHosts.mockResolvedValue(fakeFilter([]));
   mockedIntel.mockResolvedValue(cleanIntel());
 });
 
@@ -86,7 +91,7 @@ describe('analyzeTier1 with a resolved final URL', () => {
 
 describe('concurrent tier2/tier3 harness', () => {
   it('yields tier2 without waiting for a slow tier3', async () => {
-    mockedHosts.mockResolvedValue({ updatedAt: '', count: 1, hosts: ['evil.example'] });
+    mockedHosts.mockResolvedValue(fakeFilter(['evil.example']));
 
     let resolveIntel!: (v: ReturnType<typeof cleanIntel>) => void;
     mockedIntel.mockReturnValue(new Promise((resolve) => { resolveIntel = resolve; }));
@@ -112,7 +117,7 @@ describe('concurrent tier2/tier3 harness', () => {
   });
 
   it('merges a tier3 that finishes before tier2', async () => {
-    let resolveHosts!: (v: { updatedAt: string; count: number; hosts: string[] }) => void;
+    let resolveHosts!: (v: UrlhausBloom) => void;
     mockedHosts.mockReturnValue(new Promise((resolve) => { resolveHosts = resolve; }));
 
     const gen = analyzeHeuristicsTiered(urlContent('https://example.com/'));
@@ -123,14 +128,14 @@ describe('concurrent tier2/tier3 harness', () => {
     expect(second.tier2).toBeNull();
     expect(second.tier3!.details.domainAge?.age_days).toBe(3650);
 
-    resolveHosts({ updatedAt: '', count: 0, hosts: [] });
+    resolveHosts(fakeFilter([]));
     const third = (await gen.next()).value!;
     expect(third.tier2).toBeTruthy();
     expect(third.isComplete).toBe(true);
   });
 
   it('flags a malicious host anywhere in the redirect chain', async () => {
-    mockedHosts.mockResolvedValue({ updatedAt: '', count: 1, hosts: ['tracker.example'] });
+    mockedHosts.mockResolvedValue(fakeFilter(['tracker.example']));
 
     const results = await collectAll(urlContent('https://bit.ly/x'), {
       finalUrl: 'https://legit.example/landing',

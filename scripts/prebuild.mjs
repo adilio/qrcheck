@@ -9,9 +9,10 @@
  * - URL shortener domain lists
  */
 
-import { writeFile, mkdir } from 'node:fs/promises';
+import { writeFile, mkdir, rm } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { buildBloomFilter } from './bloom.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(__dirname, '../public');
@@ -63,23 +64,32 @@ async function fetchURLHaus() {
       }
     }
 
-    // Generate output JSON
+    // Build a compact Bloom filter instead of shipping the raw host list:
+    // ~42 KB base64 versus ~352 KB of hostnames, O(k) membership checks.
+    // FPR is 1e-4 (see scripts/bloom.mjs); the live URLHaus API remains the
+    // authoritative check for any hit.
+    const hostList = Array.from(hosts).sort().map((h) => h.toLowerCase());
+    const { m, k, bytes } = buildBloomFilter(hostList);
+
     const data = {
       updatedAt: new Date().toISOString(),
-      count: hosts.size,
-      hosts: Array.from(hosts).sort()
+      count: hostList.length,
+      m,
+      k,
+      bits: Buffer.from(bytes).toString('base64')
     };
 
     // Ensure output directory exists
     await mkdir(join(publicDir, 'urlhaus'), { recursive: true });
 
-    // Write to public directory
+    // Write to public directory (and drop the legacy raw host list if present)
     await writeFile(
-      join(publicDir, 'urlhaus/hosts.json'),
-      JSON.stringify(data, null, 2)
+      join(publicDir, 'urlhaus/bloom.json'),
+      JSON.stringify(data)
     );
+    await rm(join(publicDir, 'urlhaus/hosts.json'), { force: true });
 
-    console.log(`✅ URLHaus: ${data.count} malicious hosts`);
+    console.log(`✅ URLHaus: ${data.count} malicious hosts → ${(JSON.stringify(data).length / 1024).toFixed(1)} KB bloom filter (m=${m}, k=${k})`);
     return true;
   } catch (error) {
     console.error('❌ URLHaus fetch failed:', error.message);
