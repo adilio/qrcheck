@@ -7,6 +7,7 @@
  */
 
 import type { ShortenerCheckResult } from './shortener';
+import type { PayloadCheck } from './payload-analysis';
 
 export interface HeuristicResult {
   risk: 'low' | 'medium' | 'high';
@@ -59,6 +60,11 @@ export interface HeuristicResult {
       message: string;
       threats: Array<{ source: string; details: string; score: number }>;
       sources_checked: string[];
+    };
+    /** Non-URL payload checks (wifi/sms/tel/vcard/geo/mailto/text) — see payload-analysis.ts */
+    payload?: {
+      type: string;
+      checks: PayloadCheck[];
     };
   };
   recommendations: string[];
@@ -118,6 +124,34 @@ export function formatHeuristicResults(result: HeuristicResult): FormattedHeuris
     block: 2,
     error: 3
   };
+
+  // Non-URL payloads have their own type-appropriate check set — the URL
+  // checks below (structure, keywords, domain, threat intel) don't apply.
+  if (result.details.payload) {
+    const payloadChecks: FormattedHeuristicCheck[] = result.details.payload.checks.map((check) => ({
+      id: check.id,
+      label: check.label,
+      status: check.status,
+      detail: check.detail
+    }));
+    const payloadIssues: FormattedHeuristicIssue[] = result.details.payload.checks
+      .filter((check) => check.status === 'warn' || check.status === 'fail')
+      .map((check) => ({
+        id: check.id,
+        label: check.label,
+        severity: check.status as 'warn' | 'fail',
+        detail: check.detail
+      }));
+
+    return {
+      riskColor,
+      riskText,
+      summary: `Risk score: ${result.score}/100`,
+      issues: payloadIssues,
+      checks: payloadChecks,
+      intelSources: []
+    };
+  }
 
   const checks: FormattedHeuristicCheck[] = [];
   const issueMap = new Map<string, FormattedHeuristicIssue>();

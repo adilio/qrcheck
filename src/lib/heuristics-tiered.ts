@@ -21,6 +21,7 @@
 import type { QRContent } from './decode';
 import type { HeuristicResult } from './heuristics';
 import { checkUrlShortener } from './shortener';
+import { analyzePayload } from './payload-analysis';
 import { isSuspiciousTld } from '../data/tlds_suspicious';
 import { SUSPICIOUS_KEYWORDS } from '../data/keywords';
 
@@ -98,7 +99,13 @@ export async function analyzeTier1(content: QRContent, options: AnalysisOptions 
   };
 
   if (content.type !== 'url') {
-    result.recommendations.push('Only URLs can be analyzed for heuristics');
+    // Type-appropriate checks for non-URL payloads (F3): wifi, sms, tel,
+    // vcard, geo, mailto, text each get their own signal set.
+    const payload = analyzePayload(content);
+    result.details.payload = { type: content.type, checks: payload.checks };
+    result.score = Math.max(0, Math.min(100, payload.scoreDelta));
+    result.recommendations = payload.recommendations;
+    result.risk = riskFor(result.score);
     return result;
   }
 

@@ -88,7 +88,19 @@ analyzer currently has no real reputation input.
 - **Done when:** a freshly-registered domain visibly raises risk vs an aged one;
   the result is cached; a missing/slow lookup degrades to "unknown," not an error.
 
-### F3. Payload-type-aware risk analysis — highest-value new capability
+### ✅ F3. Payload-type-aware risk analysis — DONE
+
+> Shipped: `src/lib/payload-analysis.ts` gives every non-URL payload type its
+> own signal set feeding the tiered verdict — premium-rate/short-code numbers
+> (tel/sms), links + phishing wording in SMS bodies, open/WEP WiFi (SSID +
+> auth surfaced before joining), vCard embedded links + email/link domain
+> mismatch, mailto address/subject checks, geo coordinate sanity, text
+> keywords/links. Unknown types degrade to "can't assess". Verdict is advisory
+> only — nothing auto-joins/dials/sends. UI shows type-appropriate checks with
+> no misleading URL tiers. Also fixed an `smsto:` decoder bug that truncated
+> bodies at the first colon. 22 unit tests cover every payload type.
+
+### F3 (original spec). Payload-type-aware risk analysis
 
 The decoder already parses non-URL QR payloads (`url`, `text`, `email`, `phone`,
 `sms`, `wifi`, `vcard`, `geo` — see `src/lib/decode.ts`), but the security engine

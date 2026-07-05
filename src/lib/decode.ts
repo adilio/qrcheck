@@ -358,7 +358,8 @@ export function parseQRContent(data: string): QRContent {
         raw: data,
         metadata: {
           phone: parts[1],
-          body: parts.length > 2 ? parts[2] : undefined
+          // Rejoin on ':' — the body itself may contain colons (e.g. URLs)
+          body: parts.length > 2 ? parts.slice(2).join(':') : undefined
         }
       };
     }

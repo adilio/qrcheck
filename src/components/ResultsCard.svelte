@@ -153,8 +153,8 @@
     </div>
   {/if}
 
-  <!-- Tier 2: Fast Checks (Cached) -->
-  {#if tier1Complete}
+  <!-- Tier 2: Fast Checks (Cached) — URL payloads only -->
+  {#if tier1Complete && tier2Checks.length > 0}
     <div class="section">
       <h4 class="section-title">
         🗄️ Cached Intelligence
@@ -190,8 +190,8 @@
     </div>
   {/if}
 
-  <!-- Tier 3: Threat Intelligence (API Checks) -->
-  {#if tier2Complete}
+  <!-- Tier 3: Threat Intelligence (API Checks) — URL payloads only -->
+  {#if tier2Complete && tier3Checks.length > 0}
     <div class="section">
       <h4 class="section-title">
         🛡️ Threat Intelligence

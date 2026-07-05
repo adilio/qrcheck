@@ -655,11 +655,17 @@
     tier2Complete = false;
     tier3Complete = false;
     tier1Checks = [];
-    tier2Checks = [{ label: 'URLHaus Database', status: 'loading', detail: 'Checking...' }];
-    tier3Checks = [
-      { label: 'Domain Age', status: 'loading', detail: 'Checking...' },
-      { label: 'Threat Intelligence', status: 'loading', detail: 'Checking...' }
-    ];
+    if (content.type === 'url') {
+      tier2Checks = [{ label: 'URLHaus Database', status: 'loading', detail: 'Checking...' }];
+      tier3Checks = [
+        { label: 'Domain Age', status: 'loading', detail: 'Checking...' },
+        { label: 'Threat Intelligence', status: 'loading', detail: 'Checking...' }
+      ];
+    } else {
+      // Non-URL payloads have no network tiers
+      tier2Checks = [];
+      tier3Checks = [];
+    }
 
     // Use progressive tiered analysis for instant feedback
     const progressiveAnalysis = analyzeHeuristicsTiered(content, options);
@@ -1217,6 +1223,18 @@
     const tier2: Array<{label: string; status: 'pass' | 'warn' | 'fail' | 'loading'; detail?: string}> = [];
     const tier3: Array<{label: string; status: 'pass' | 'warn' | 'fail' | 'loading'; detail?: string}> = [];
 
+    // Non-URL payloads: type-appropriate checks only, no network tiers
+    if (result.details?.payload) {
+      for (const check of result.details.payload.checks) {
+        tier1.push({
+          label: check.label,
+          status: check.status === 'fail' ? 'fail' : check.status === 'warn' ? 'warn' : 'pass',
+          detail: check.detail
+        });
+      }
+      return { tier1, tier2, tier3 };
+    }
+
     // Tier 1 checks (instant client-side)
     if (result.details?.shortenerCheck) {
       tier1.push({
@@ -1629,10 +1647,10 @@
       {/if}
 
       <!-- Progressive Results Card (New Component) -->
-      {#if qrContent && qrContent.type === 'url' && tier1Complete}
+      {#if qrContent && tier1Complete}
         <ResultsCard
           verdict={progressiveVerdict}
-          finalUrl={urlText}
+          finalUrl={qrContent.type === 'url' ? urlText : ''}
           redirectChain={hops}
           redirectPartial={redirectPartial}
           tier1Complete={tier1Complete}
