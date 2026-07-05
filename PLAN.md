@@ -63,7 +63,18 @@ belongs in the existing Netlify function.
   endpoint, and offers a verdict-gated continue action; unit tests cover loop,
   timeout, and max-hop cases.
 
-### F2. Real domain-age / reputation signal (`#14`) — closes the credibility gap
+### ✅ F2. Real domain-age / reputation signal (`#14`) — DONE
+
+> Shipped: `functions/check-domain-age.ts` rebuilt — RDAP lookup with a 5s
+> timeout, registrable-domain normalization (www./deep subdomains, co.uk-style
+> ccTLDs), a 12h warm-instance cache server-side plus a 24h TTLCache client-side
+> (determinate results only). Newly-registered domains add +20/+10 risk;
+> established (5y+) domains now subtract 10 (score floor 0, from P3); failures
+> degrade to "unknown" with zero points. 14 unit tests; verified live
+> (google.com/bbc.co.uk/anthropic.com → established −10; a transient RDAP
+> rate-limit degraded gracefully to unknown).
+
+### F2 (original spec). Real domain-age / reputation signal (`#14`)
 
 Replace the removed `Math.random()` placeholder with a genuine signal. A "security"
 analyzer currently has no real reputation input.

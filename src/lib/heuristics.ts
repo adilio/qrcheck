@@ -277,6 +277,9 @@ export function formatHeuristicResults(result: HeuristicResult): FormattedHeuris
   if (result.details.domainAge?.risk_points && result.details.domainAge.risk_points > 0) {
     domainStatus = statusOrder[domainStatus] < statusOrder['warn'] ? 'warn' : domainStatus;
     domainDetails.push(result.details.domainAge.message);
+  } else if (result.details.domainAge && result.details.domainAge.risk_points < 0) {
+    // Established domain — a positive trust signal, shown without a warning
+    domainDetails.push(result.details.domainAge.message);
   }
 
   const domainDetail = domainDetails.length

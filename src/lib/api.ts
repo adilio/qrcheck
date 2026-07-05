@@ -1,3 +1,5 @@
+import { TTLCache } from './cache';
+
 const base = import.meta.env.VITE_API_BASE;
 
 const KNOWN_SHORTENERS = ['bit.ly', 'tinyurl.com', 't.co', 'qrco.de', 'buff.ly', 'goo.gl', 'ow.ly', 'tiny.cc'];
@@ -284,10 +286,27 @@ export interface AllThreatIntelResults {
   threatIntel: ThreatIntelResult | null;
 }
 
+// Registration dates don't change; cache determinate lookups for a day so
+// re-scans of the same domain skip the network entirely.
+const domainAgeCache = new TTLCache<DomainAgeResult>({
+  dbName: 'qrcheck-domain-cache',
+  storeName: 'domain-age',
+  maxAgeMs: 24 * 60 * 60 * 1000,
+  maxEntries: 200
+});
+
 /**
  * Check domain age via Netlify Function
  */
 async function checkDomainAge(domain: string): Promise<DomainAgeResult> {
+  const cacheKey = domain.toLowerCase();
+  try {
+    const cached = await domainAgeCache.get(cacheKey);
+    if (cached) return cached;
+  } catch (_e) {
+    // Cache unavailable — fall through to the network
+  }
+
   const response = await fetchWithTimeout('/.netlify/functions/check-domain-age', {
     method: 'POST',
     body: JSON.stringify({ domain }),
@@ -298,7 +317,18 @@ async function checkDomainAge(domain: string): Promise<DomainAgeResult> {
     throw new Error(`Domain age check failed: ${response.status}`);
   }
 
-  return response.json();
+  const result: DomainAgeResult = await response.json();
+
+  // Only cache determinate answers; "unknown" should retry next scan
+  if (result && result.age_days !== null) {
+    try {
+      await domainAgeCache.set(cacheKey, result);
+    } catch (_e) {
+      // Cache write failure is non-fatal
+    }
+  }
+
+  return result;
 }
 
 /**
