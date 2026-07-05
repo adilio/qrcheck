@@ -734,17 +734,11 @@
         }
 
         if (tieredResult.tier2 && !tier2Complete) {
-          console.log('✅ Tier 2 complete, checks:', checks.tier2);
           tier2Checks = [...checks.tier2]; // Force new array reference for reactivity
           tier2Complete = true;
         }
 
         if (tieredResult.tier3 && !tier3Complete) {
-          console.log('✅ Tier 3 complete, checks:', checks.tier3);
-          console.log('Tier 3 result details:', {
-            domainAge: latestResult.details?.domainAge,
-            enhancedThreatIntel: latestResult.details?.enhancedThreatIntel
-          });
           tier3Checks = [...checks.tier3]; // Force new array reference for reactivity
           tier3Complete = true;
         }
@@ -860,7 +854,7 @@
       };
 
       videoEndedHandler = () => {
-        console.log('Video ended unexpectedly');
+        console.warn('Video ended unexpectedly');
         stopCameraScan('error');
         cameraError = 'Video stream ended unexpectedly.';
       };
@@ -1083,11 +1077,16 @@
   function initializeParticles() {
     if (typeof document === 'undefined') return;
 
+    // Purely decorative — skip entirely for reduced-motion users
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
     const container = document.getElementById('particleContainer');
     if (!container) return;
 
     const colors = ['pink', 'magenta', 'purple', 'blue', 'cyan', 'deep-purple'];
-    const particleCount = 300;
+    // Sparse field: each particle self-recreates when its animation ends, so
+    // the population stays constant without any polling interval.
+    const particleCount = 48;
 
     function createParticle() {
       const particle = document.createElement('div');
@@ -1119,23 +1118,13 @@
     for (let i = 0; i < particleCount; i++) {
       createParticle();
     }
-
-    setInterval(() => {
-      if (container.children.length < particleCount * 2) {
-        createParticle();
-      }
-    }, 200);
   }
 
   function scrollToResults() {
     if (typeof document === 'undefined') return;
 
-    console.log('🔄 scrollToResults called, showProgressSection:', showProgressSection);
-
     // More robust approach for production environment
     const attemptScroll = (attempt = 1) => {
-      console.log(`🎯 Scroll attempt ${attempt}, showProgressSection: ${showProgressSection}`);
-
       // Try multiple potential scroll targets in order of preference
       const targets = [
         '.results-card',              // Progressive Results Card (priority)
@@ -1153,10 +1142,7 @@
           const rect = element.getBoundingClientRect();
           const isVisible = rect.height > 0 && rect.width > 0;
 
-          console.log(`📍 Found ${selector}, visible: ${isVisible}, height: ${rect.height}`);
-
           if (isVisible) {
-            console.log(`✅ Scrolling to ${selector}`);
             element.scrollIntoView({
               behavior: 'smooth',
               block: 'start'
@@ -1169,10 +1155,8 @@
 
       // If no target found and we haven't tried too many times, retry
       if (!targetFound && attempt < 5) {
-        console.log(`⏳ No visible targets found, retrying in ${attempt * 200}ms...`);
         setTimeout(() => attemptScroll(attempt + 1), attempt * 200);
       } else if (!targetFound) {
-        console.log('❌ No scroll targets found after 5 attempts, using fallback');
         // Final fallback: scroll to bottom
         setTimeout(() => {
           window.scrollTo({

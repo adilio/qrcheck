@@ -19,9 +19,6 @@ export async function registerServiceWorker() {
       onOfflineReady() {
         offlineReady.set(true);
       },
-      onRegistered(r) {
-        console.log('Service Worker registered:', r);
-      },
       onRegisterError(error) {
         console.error('SW registration error:', error);
       }

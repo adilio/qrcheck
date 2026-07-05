@@ -204,6 +204,25 @@ the verdict.
   signal's timeout, not the sum; a hung signal degrades to "unknown" without
   blocking the verdict.
 
+## Proactive improvements (added during Fable pass)
+
+### ✅ PX1. Tame the particle background + stop logging scanned URLs — DONE
+
+- **Scope:** the decorative particle field creates 300 absolutely-positioned
+  DOM nodes at mount, each on a self-recreating timeout, plus a 200 ms
+  `setInterval` that grows the population to 600 — a permanent CPU/DOM/battery
+  cost on every visit, worst on the mobile devices QR scanning targets. Cap
+  the field at 48 particles, drop the interval entirely, and skip the effect
+  for `prefers-reduced-motion` users (also an accessibility gap). Separately,
+  the analysis flow `console.log`s every scanned URL, tier result, and intel
+  payload — chatty in hot paths and off-brand for a privacy-first tool; keep
+  `console.warn/error`, drop the debug logs.
+- **Guardrails:** visual character preserved (same colors/animation, sparser);
+  no behavior change to analysis; errors/warnings still logged.
+- **Done when:** steady-state particle DOM nodes ≤ 48 (was up to 600), the
+  5 Hz interval is gone, reduced-motion users get no particles, and a scan
+  produces no console output on the happy path.
+
 ## Suggested order
 
 1. Signal-model decision (quick; unblocks F1/F2).
