@@ -118,7 +118,17 @@ covers what the QR actually *does*, not just links.
 - **Done when:** scanning a non-URL QR shows a type-appropriate verdict instead of
   the current URL-only treatment; unit tests cover each payload type.
 
-### F4. Detect multiple URLs and let the user choose
+### ✅ F4. Detect multiple URLs and let the user choose — DONE
+
+> Shipped: non-URL payloads (text/sms/vcard/mailto) surface every embedded
+> http(s) link in a chooser — host shown bold, long URLs middle-truncated,
+> nothing fetched/resolved/intel'd until the user picks one; picking runs the
+> full URL flow on that link. Pure-URL payloads keep the zero-click flow
+> unchanged. Also fixed a broken share-target path (called an undefined
+> function) found while wiring this. E2E covers chooser → analyze and the
+> no-links case.
+
+### F4 (original spec). Detect multiple URLs and let the user choose
 
 A single QR/scanned payload can carry more than one URL (e.g. a vCard or text
 block with several links). Today the app assumes one URL and picks implicitly.

@@ -10,6 +10,7 @@
     type FormattedHeuristicCheck
   } from './lib/heuristics';
   import { analyzeHeuristicsTiered, type AnalysisOptions } from './lib/heuristics-tiered';
+  import { extractUrls } from './lib/payload-analysis';
   import { resolveChain, intel, type IntelResponse } from './lib/api';
   import { startCamera, stopCamera } from './lib/camera';
   import ResultsCard from './components/ResultsCard.svelte';
@@ -135,6 +136,7 @@
   let hops: string[] = [];
   let redirectExpansionBlocked = false;
   let redirectPartial = false;
+  let embeddedUrls: string[] = [];
   let intelRes: IntelResponse | null = null;
   let flaggedChecks: FormattedHeuristicCheck[] = [];
   let error = '';
@@ -228,7 +230,7 @@
     const sharedUrl = handleShareTarget();
     if (sharedUrl) {
       manualUrl = sharedUrl;
-      handleManualUrlSubmit();
+      void runManual();
     }
   });
 
@@ -300,6 +302,7 @@
     hops = [];
     redirectExpansionBlocked = false;
     redirectPartial = false;
+    embeddedUrls = [];
     intelRes = null;
     originalInputUrl = '';
     learnMoreOpen = false;
@@ -619,6 +622,35 @@
     await analyzeFromText(manualUrl);
   }
 
+  /** Every http(s) URL embedded in a non-URL payload (raw + decoded metadata). */
+  function collectEmbeddedUrls(content: QRContent): string[] {
+    const sources = [content.raw, content.metadata?.body, content.metadata?.subject]
+      .filter((s): s is string => Boolean(s));
+    return extractUrls(sources.join(' '));
+  }
+
+  function hostOf(url: string): string {
+    try {
+      return new URL(url).hostname;
+    } catch {
+      return url;
+    }
+  }
+
+  /** Middle-truncate long URLs for display so they stay readable and unspoofable. */
+  function displayUrl(url: string, max = 96): string {
+    if (url.length <= max) return url;
+    const head = Math.ceil((max - 1) * 0.7);
+    const tail = max - 1 - head;
+    return `${url.slice(0, head)}…${url.slice(url.length - tail)}`;
+  }
+
+  async function analyzeEmbeddedUrl(url: string) {
+    // Full fresh analysis of the chosen URL — resolution and intel only
+    // start now, after the user picked it.
+    await analyzeFromText(url);
+  }
+
   async function processDecoded(raw: string) {
     urlText = raw;
     originalInputUrl = raw; // Store the original input URL immediately
@@ -636,6 +668,9 @@
       } else {
         // Run heuristics analysis for non-URL content
         await runHeuristicsAnalysis(qrContent);
+        // Surface any embedded links so the user can choose which to analyze
+        // (F4). Nothing is fetched or resolved until they pick one.
+        embeddedUrls = collectEmbeddedUrls(qrContent);
         flow = 'complete';
         trackScanAndPromptInstall();
       }
@@ -1643,6 +1678,32 @@
               </div>
             </div>
           </div>
+        </section>
+      {/if}
+
+      <!-- Embedded link chooser (F4): links inside non-URL payloads are never
+           fetched or analyzed until the user explicitly picks one -->
+      {#if embeddedUrls.length > 0 && qrContent && qrContent.type !== 'url'}
+        <section class="embedded-urls">
+          <h3>🔗 {embeddedUrls.length === 1 ? 'Link found in this content' : `${embeddedUrls.length} links found in this content`}</h3>
+          <p class="embedded-urls-hint">
+            {embeddedUrls.length === 1
+              ? 'This link has not been checked yet. Analyze it before opening.'
+              : 'Choose which link to analyze — none are fetched until you pick one.'}
+          </p>
+          <ul class="embedded-url-list">
+            {#each embeddedUrls as url (url)}
+              <li class="embedded-url-item">
+                <div class="embedded-url-text">
+                  <span class="embedded-url-host">{hostOf(url)}</span>
+                  <span class="embedded-url-full" title={url}>{displayUrl(url)}</span>
+                </div>
+                <button class="embedded-url-analyze" type="button" on:click={() => analyzeEmbeddedUrl(url)}>
+                  Analyze
+                </button>
+              </li>
+            {/each}
+          </ul>
         </section>
       {/if}
 
@@ -3080,6 +3141,79 @@
 
   .content-summary {
     margin-bottom: 0;
+  }
+
+  .embedded-urls {
+    margin: 20px 0 0 0;
+    padding: 16px 20px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--card-bg, rgba(255, 255, 255, 0.04));
+    text-align: left;
+  }
+
+  .embedded-urls h3 {
+    margin: 0 0 4px 0;
+    font-size: 1rem;
+  }
+
+  .embedded-urls-hint {
+    margin: 0 0 12px 0;
+    font-size: 0.85rem;
+    opacity: 0.75;
+  }
+
+  .embedded-url-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .embedded-url-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+  }
+
+  .embedded-url-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .embedded-url-host {
+    font-weight: 600;
+    font-size: 0.9rem;
+  }
+
+  .embedded-url-full {
+    font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+    font-size: 0.8rem;
+    opacity: 0.75;
+    word-break: break-all;
+  }
+
+  .embedded-url-analyze {
+    flex-shrink: 0;
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid #10b981;
+    background: transparent;
+    color: #10b981;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .embedded-url-analyze:hover {
+    background: rgba(16, 185, 129, 0.12);
   }
 
   .content-card {
