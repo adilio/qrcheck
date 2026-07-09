@@ -9,13 +9,47 @@
  * - URL shortener domain lists
  */
 
-import { writeFile, mkdir, rm } from 'node:fs/promises';
+import { writeFile, mkdir, rm, access } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { buildBloomFilter } from './bloom.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(__dirname, '../public');
+
+/**
+ * Fetch with retry and linear backoff. Upstream sources (especially
+ * raw.githubusercontent.com from shared CI IPs) intermittently return 429.
+ */
+async function fetchWithRetry(url, attempts = 3) {
+  let lastError;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`${url} returned ${response.status}`);
+      }
+      return response;
+    } catch (error) {
+      lastError = error;
+      if (i < attempts - 1) {
+        const delay = 2000 * (i + 1);
+        console.warn(`⚠️ ${error.message} — retrying in ${delay / 1000}s (attempt ${i + 2}/${attempts})`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+  throw lastError;
+}
+
+async function fileExists(path) {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Fetch and process URLHaus malicious hosts database
@@ -26,16 +60,9 @@ async function fetchURLHaus() {
   try {
     // Fetch both recent and online malicious URL feeds
     const responses = await Promise.all([
-      fetch('https://urlhaus.abuse.ch/downloads/csv_recent/'),
-      fetch('https://urlhaus.abuse.ch/downloads/csv_online/')
+      fetchWithRetry('https://urlhaus.abuse.ch/downloads/csv_recent/'),
+      fetchWithRetry('https://urlhaus.abuse.ch/downloads/csv_online/')
     ]);
-
-    // Check for HTTP errors
-    for (const response of responses) {
-      if (!response.ok) {
-        throw new Error(`URLHaus API returned ${response.status}`);
-      }
-    }
 
     const csvTexts = await Promise.all(responses.map(r => r.text()));
     const hosts = new Set();
@@ -106,16 +133,9 @@ async function fetchShorteners() {
   try {
     // Fetch from multiple upstream sources
     const responses = await Promise.all([
-      fetch('https://raw.githubusercontent.com/korlabsio/urlshortener/refs/heads/main/names.txt'),
-      fetch('https://raw.githubusercontent.com/PeterDaveHello/url-shorteners/refs/heads/master/list')
+      fetchWithRetry('https://raw.githubusercontent.com/korlabsio/urlshortener/refs/heads/main/names.txt'),
+      fetchWithRetry('https://raw.githubusercontent.com/PeterDaveHello/url-shorteners/refs/heads/master/list')
     ]);
-
-    // Check for HTTP errors
-    for (const response of responses) {
-      if (!response.ok) {
-        throw new Error(`Shortener source returned ${response.status}`);
-      }
-    }
 
     const texts = await Promise.all(responses.map(r => r.text()));
     const domains = new Set();
@@ -162,24 +182,38 @@ async function prebuild() {
 
   const startTime = Date.now();
 
-  try {
-    // Fetch all data sources in parallel
-    await Promise.all([
-      fetchURLHaus(),
-      fetchShorteners()
-    ]);
+  // Fetch all data sources in parallel. A failed refresh is only fatal when
+  // there is no existing data file to fall back on — a rate-limited upstream
+  // (e.g. raw.githubusercontent.com returning 429) must not block deploys
+  // that would otherwise ship slightly stale but perfectly usable data.
+  const sources = [
+    { name: 'URLHaus', run: fetchURLHaus, output: join(publicDir, 'urlhaus/bloom.json') },
+    { name: 'Shorteners', run: fetchShorteners, output: join(publicDir, 'shorteners.json') }
+  ];
 
-    const duration = Date.now() - startTime;
-    console.log(`\n✅ Data sync complete in ${duration}ms!`);
-    process.exit(0);
-  } catch (error) {
-    console.error('\n❌ Data sync failed:', error);
-    console.error('\nNote: Build will continue with existing cached data if available.');
+  const results = await Promise.allSettled(sources.map((s) => s.run()));
 
-    // Exit with error code to fail the build
-    // This ensures we don't deploy with stale/missing data
+  let fatal = false;
+  for (const [i, result] of results.entries()) {
+    if (result.status === 'rejected') {
+      const source = sources[i];
+      if (await fileExists(source.output)) {
+        console.warn(`⚠️ ${source.name} refresh failed (${result.reason?.message}); deploying existing ${source.output}`);
+      } else {
+        console.error(`❌ ${source.name} fetch failed (${result.reason?.message}) and no existing data at ${source.output}`);
+        fatal = true;
+      }
+    }
+  }
+
+  if (fatal) {
+    console.error('\n❌ Data sync failed with no fallback data available.');
     process.exit(1);
   }
+
+  const duration = Date.now() - startTime;
+  console.log(`\n✅ Data sync complete in ${duration}ms!`);
+  process.exit(0);
 }
 
 // Run prebuild
