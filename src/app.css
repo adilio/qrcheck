@@ -1352,6 +1352,28 @@ input::placeholder {
   opacity: 0.9;
 }
 
+.verdict .go-site-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 1rem;
+  padding: 0.65rem 1.4rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-safe);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 1rem;
+  text-decoration: none;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
+  transition: transform var(--transition), box-shadow var(--transition), filter var(--transition);
+}
+
+.verdict .go-site-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.45);
+}
+
 @media (max-width: 720px) {
   .page {
     padding-top: 2.2rem;

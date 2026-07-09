@@ -1610,6 +1610,19 @@
           {:else}Multiple red flags detected. This is likely malicious.
           {/if}
         </p>
+        <!-- Verdict-gated quick action: only a safe verdict gets a one-click
+             open at the top; flagged verdicts keep the explicit confirm flow
+             further down in the results card. -->
+        {#if verdictMetaInfo.tone === 'safe' && qrContent?.type === 'url' && terminalUrl}
+          <a
+            class="go-site-btn"
+            href={terminalUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            GO to Site ↗
+          </a>
+        {/if}
       </div>
 
       <header class="verdict-summary">
