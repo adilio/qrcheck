@@ -1,7 +1,11 @@
 [build]
   command = "npm run build"
   publish = "dist"
-  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- src/ functions/ scripts/ public/ index.html package.json package-lock.json netlify.toml vite.config.mts svelte.config.js tsconfig.json"
+  # Skip a build only when a previous deploy is cached AND none of the watched
+  # paths changed. On cache-miss builds Netlify sets CACHED_COMMIT_REF equal to
+  # COMMIT_REF, so a bare `git diff --quiet` always exits 0 there and cancels
+  # every deploy; the inequality test forces those builds to proceed.
+  ignore = "test \"$CACHED_COMMIT_REF\" != \"$COMMIT_REF\" && git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- src/ functions/ scripts/ public/ index.html package.json package-lock.json netlify.toml vite.config.mts svelte.config.js tsconfig.json"
 
 [dev]
   command = "npm run dev"
