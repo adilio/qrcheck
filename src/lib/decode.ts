@@ -52,6 +52,71 @@ export function decodeQRFromImageData(image: ImageData): string {
 }
 
 export async function decodeQRFromFile(file: File): Promise<string> {
+  const codes = await decodeAllQRFromFile(file);
+  return codes[0];
+}
+
+// Images larger than this are downscaled (preserving aspect ratio — a forced
+// square resize distorts QR modules and breaks decoding) before scanning.
+const MAX_DECODE_DIMENSION = 1600;
+// Cap the find-and-mask loop per region so a pathological image can't spin.
+const MAX_CODES_PER_REGION = 6;
+
+type QRLocation = NonNullable<ReturnType<JsQR>>['location'];
+
+/** Paint white over a decoded code's bounding box so the next pass finds the next code. */
+function maskLocation(image: ImageData, loc: QRLocation) {
+  const xs = [loc.topLeftCorner.x, loc.topRightCorner.x, loc.bottomLeftCorner.x, loc.bottomRightCorner.x];
+  const ys = [loc.topLeftCorner.y, loc.topRightCorner.y, loc.bottomLeftCorner.y, loc.bottomRightCorner.y];
+  const pad = 4;
+  const x0 = Math.max(0, Math.floor(Math.min(...xs)) - pad);
+  const x1 = Math.min(image.width - 1, Math.ceil(Math.max(...xs)) + pad);
+  const y0 = Math.max(0, Math.floor(Math.min(...ys)) - pad);
+  const y1 = Math.min(image.height - 1, Math.ceil(Math.max(...ys)) + pad);
+  const data = image.data;
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const i = (y * image.width + x) * 4;
+      data[i] = data[i + 1] = data[i + 2] = 255;
+    }
+  }
+}
+
+/**
+ * Decode every code in one region by repeatedly decoding and masking out the
+ * hit. jsQR only ever reports a single code per call, so this is how a region
+ * holding several codes yields all of them. Mutates the passed ImageData.
+ */
+function collectCodesInRegion(image: ImageData, found: Set<string>) {
+  if (!jsQR) return;
+  for (let i = 0; i < MAX_CODES_PER_REGION; i++) {
+    const code = jsQR(image.data, image.width, image.height);
+    if (!code) return;
+    const text = code.data.trim();
+    if (text) found.add(text);
+    maskLocation(image, code.location);
+  }
+}
+
+/** Tile offsets along one axis: half-tile steps, last tile anchored to the far edge. */
+function tilePositions(dim: number, tile: number): number[] {
+  const step = Math.ceil(tile / 2);
+  const positions: number[] = [];
+  for (let p = 0; p + tile < dim; p += step) positions.push(p);
+  positions.push(Math.max(0, dim - tile));
+  return Array.from(new Set(positions));
+}
+
+/**
+ * Decode all QR codes in an image file.
+ *
+ * jsQR fails outright on images containing several codes — competing finder
+ * patterns confuse its locator. Beyond the full-frame find-and-mask pass, the
+ * image is rescanned as overlapping grid tiles and full-width/-height strips
+ * (scales 1/2 and 1/3) so each code eventually appears in a region where it
+ * dominates. Results are deduped by decoded content.
+ */
+export async function decodeAllQRFromFile(file: File): Promise<string[]> {
   // Kick off the decoder download in parallel with image validation/bitmap work
   const decoderReady = ensureDecoderLoaded();
 
@@ -72,12 +137,18 @@ export async function decodeQRFromFile(file: File): Promise<string> {
 
   let bitmap: ImageBitmap;
   try {
-    // Try to create bitmap with options for better image processing
-    bitmap = await createImageBitmap(file, {
-      resizeWidth: Math.min(file.size ? 800 : 400, 1200), // Resize large images for better performance
-      resizeHeight: Math.min(file.size ? 800 : 400, 1200),
-      resizeQuality: 'high'
-    });
+    bitmap = await createImageBitmap(file);
+    const largest = Math.max(bitmap.width, bitmap.height);
+    if (largest > MAX_DECODE_DIMENSION) {
+      const scale = MAX_DECODE_DIMENSION / largest;
+      const resized = await createImageBitmap(bitmap, {
+        resizeWidth: Math.round(bitmap.width * scale),
+        resizeHeight: Math.round(bitmap.height * scale),
+        resizeQuality: 'high'
+      });
+      bitmap.close();
+      bitmap = resized;
+    }
   } catch (err) {
     console.error('Failed to create image bitmap for QR decode', err);
     throw new Error('Unable to process this image. Please try a different image format.');
@@ -91,7 +162,7 @@ export async function decodeQRFromFile(file: File): Promise<string> {
   const canvas = document.createElement('canvas');
   canvas.width = bitmap.width;
   canvas.height = bitmap.height;
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) {
     throw new Error('Canvas 2D context unavailable');
   }
@@ -99,65 +170,56 @@ export async function decodeQRFromFile(file: File): Promise<string> {
   await decoderReady;
 
   try {
-    // Draw the image and try multiple approaches for better QR detection
     ctx.drawImage(bitmap, 0, 0);
+    const width = canvas.width;
+    const height = canvas.height;
+    const found = new Set<string>();
 
-    // First attempt: normal orientation
-    try {
-      const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      return decodeQRFromImageData(image);
-    } catch (_err) {
-      console.debug('Normal QR decode failed, trying alternatives');
+    // Pass 1: full frame, find-and-mask
+    collectCodesInRegion(ctx.getImageData(0, 0, width, height), found);
+
+    // Pass 2: overlapping tiles and strips. Grid tiles isolate codes that
+    // confuse the full-frame locator; strips catch codes jsQR only resolves
+    // with the full extent of one axis present.
+    for (const scale of [2, 3]) {
+      const tileW = Math.ceil(width / scale);
+      const tileH = Math.ceil(height / scale);
+      if (tileW < 60 || tileH < 60) continue;
+      const xs = tilePositions(width, tileW);
+      const ys = tilePositions(height, tileH);
+      for (const sy of ys) {
+        for (const sx of xs) {
+          const w = Math.min(tileW, width - sx);
+          const h = Math.min(tileH, height - sy);
+          collectCodesInRegion(ctx.getImageData(sx, sy, w, h), found);
+        }
+      }
+      for (const sy of ys) {
+        collectCodesInRegion(ctx.getImageData(0, sy, width, Math.min(tileH, height - sy)), found);
+      }
+      for (const sx of xs) {
+        collectCodesInRegion(ctx.getImageData(sx, 0, Math.min(tileW, width - sx), height), found);
+      }
     }
 
-    // Second attempt: try with enhanced contrast
-    try {
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const enhanced = enhanceImageForQR(imageData);
-      return decodeQRFromImageData(enhanced);
-    } catch (_err) {
-      console.debug('Enhanced QR decode failed');
+    // Pass 3 (nothing found yet): contrast/threshold variants on the full
+    // frame for low-quality single-code photos. Rotation/inversion variants
+    // aren't needed — jsQR is orientation-invariant and tries both polarities.
+    if (found.size === 0) {
+      collectCodesInRegion(enhanceImageForQR(ctx.getImageData(0, 0, width, height)), found);
+    }
+    if (found.size === 0) {
+      collectCodesInRegion(adaptiveThreshold(ctx.getImageData(0, 0, width, height)), found);
     }
 
-    // Third attempt: try adaptive thresholding for better logo detection
-    try {
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const adaptive = adaptiveThreshold(imageData);
-      return decodeQRFromImageData(adaptive);
-    } catch (_err) {
-      console.debug('Adaptive threshold QR decode failed');
+    if (found.size === 0) {
+      throw new Error(analyzeQRImage(ctx, width, height));
     }
 
-    // Fourth attempt: try flipping the image (some QR codes might be upside down)
-    try {
-      ctx.save();
-      ctx.translate(canvas.width / 2, canvas.height / 2);
-      ctx.rotate(Math.PI);
-      ctx.drawImage(bitmap, -bitmap.width / 2, -bitmap.height / 2);
-      ctx.restore();
-
-      const flippedImage = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      return decodeQRFromImageData(flippedImage);
-    } catch (_err) {
-      console.debug('Flipped QR decode failed');
-    }
-
-    // Fifth attempt: try with inverted colors (white on black QR codes)
-    try {
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const inverted = invertColors(imageData);
-      return decodeQRFromImageData(inverted);
-    } catch (_err) {
-      console.debug('Inverted QR decode failed');
-    }
-
-    // If all attempts fail, analyze the image to provide helpful feedback
-    const feedback = analyzeQRImage(ctx, canvas.width, canvas.height);
-    throw new Error(feedback);
-
+    return Array.from(found);
   } catch (err) {
     console.error('QR decode failed', err);
-    if (err instanceof Error && err.message.includes('No QR code found')) {
+    if (err instanceof Error && err.message.includes('No QR code detected')) {
       throw err;
     }
     throw new Error('Unable to read QR code from this image. Please try a clearer image.');
@@ -237,20 +299,6 @@ function adaptiveThreshold(imageData: ImageData): ImageData {
     }
   }
 
-  return imageData;
-}
-
-/**
- * Inverts colors to handle white-on-black QR codes
- */
-function invertColors(imageData: ImageData): ImageData {
-  const data = imageData.data;
-  for (let i = 0; i < data.length; i += 4) {
-    data[i] = 255 - data[i];       // Red
-    data[i + 1] = 255 - data[i + 1]; // Green
-    data[i + 2] = 255 - data[i + 2]; // Blue
-    // Alpha channel remains unchanged
-  }
   return imageData;
 }
 

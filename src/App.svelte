@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from 'svelte';
   import { DEV_ENABLE_MANUAL_URL } from './lib/flags';
-  import { decodeQRFromFile, decodeQRFromImageData, ensureDecoderLoaded, parseQRContent, type QRContent } from './lib/decode';
+  import { decodeAllQRFromFile, decodeQRFromImageData, ensureDecoderLoaded, parseQRContent, type QRContent } from './lib/decode';
   import {
     formatHeuristicResults,
     type CheckStatus,
@@ -143,6 +143,9 @@
   let cameraError = '';
   let clipboardError = '';
   let step = '';
+  // All codes decoded from the last uploaded image; a chooser is shown when
+  // there is more than one and nothing is analyzed until the user picks.
+  let multiQrCodes: string[] = [];
 
   // Transparent Analysis System - New State
   interface AnalysisStep {
@@ -296,6 +299,7 @@
   function prepareForAnalysis() {
     error = '';
     step = '';
+    multiQrCodes = [];
     qrContent = null;
     heuristicsResult = null;
     formattedHeuristics = null;
@@ -592,8 +596,17 @@
     prepareForAnalysis();
     try {
       step = 'Decoding QR image…';
-      const raw = await decodeQRFromFile(file);
-      await processDecoded(raw);
+      const codes = await decodeAllQRFromFile(file);
+      if (codes.length > 1) {
+        // Several codes in one image: show the chooser and analyze nothing
+        // until the user picks one (same consent model as embedded links).
+        multiQrCodes = codes;
+        flow = 'idle';
+        step = '';
+        showProgressSection = false;
+        return;
+      }
+      await processDecoded(codes[0]);
     } catch (err: any) {
       flow = 'error';
       error = err?.message || 'Unable to analyse that QR image.';
@@ -649,6 +662,26 @@
     // Full fresh analysis of the chosen URL — resolution and intel only
     // start now, after the user picked it.
     await analyzeFromText(url);
+  }
+
+  async function analyzeMultiQrCode(code: string) {
+    // prepareForAnalysis (run synchronously inside analyzeFromText) clears the
+    // code list; restore it right away so the chooser stays on screen and the
+    // user can analyze the other codes afterwards.
+    const codes = multiQrCodes;
+    const analysis = analyzeFromText(code);
+    multiQrCodes = codes;
+    await analysis;
+  }
+
+  /** One-line human label for a decoded payload shown in the multi-code chooser. */
+  function describeQrPayload(code: string): { icon: string; kind: string } {
+    const type = parseQRContent(code).type;
+    const icons: Record<string, string> = {
+      url: '🔗', text: '📝', email: '✉️', phone: '📞', sms: '💬',
+      wifi: '📶', vcard: '👤', geo: '📍'
+    };
+    return { icon: icons[type] || '❓', kind: type };
   }
 
   async function processDecoded(raw: string) {
@@ -1595,6 +1628,29 @@
           Stop scanning
         </button>
       </div>
+    </section>
+  {/if}
+
+  <!-- Multi-QR chooser: an uploaded image held several codes; none are
+       analyzed until the user explicitly picks one -->
+  {#if multiQrCodes.length > 1}
+    <section class="embedded-urls multi-qr" aria-live="polite">
+      <h3>🔳 {multiQrCodes.length} QR codes found in this image</h3>
+      <p class="embedded-urls-hint">Choose which code to analyze — nothing is checked until you pick one.</p>
+      <ul class="embedded-url-list">
+        {#each multiQrCodes as code, index (code)}
+          {@const payload = describeQrPayload(code)}
+          <li class="embedded-url-item">
+            <div class="embedded-url-text">
+              <span class="embedded-url-host">{payload.icon} Code {index + 1} · {payload.kind}</span>
+              <span class="embedded-url-full" title={code}>{displayUrl(code)}</span>
+            </div>
+            <button class="embedded-url-analyze" type="button" on:click={() => analyzeMultiQrCode(code)}>
+              Analyze
+            </button>
+          </li>
+        {/each}
+      </ul>
     </section>
   {/if}
 
@@ -3149,6 +3205,16 @@
     border: 1px solid var(--border-color);
     background: var(--card-bg, rgba(255, 255, 255, 0.04));
     text-align: left;
+  }
+
+  /* The multi-QR chooser renders standalone on the page (not inside the
+     verdict card), so it needs its own card chrome. */
+  .embedded-urls.multi-qr {
+    margin: 0;
+    border: 1px solid var(--surface-border);
+    background: var(--surface-card);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-soft);
   }
 
   .embedded-urls h3 {
