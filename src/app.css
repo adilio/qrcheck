@@ -124,6 +124,9 @@ body[data-theme='light'] .particle-container::after {
   border-radius: 50%;
   animation: float linear infinite;
   opacity: 0;
+  /* Composite each particle on the GPU so the constant float animation
+     never forces main-thread repaints while the page scrolls. */
+  will-change: transform, opacity;
 }
 
 @keyframes float {
@@ -213,7 +216,6 @@ header {
   height: 3rem;
   border-radius: 50%;
   background: var(--surface-subtle);
-  backdrop-filter: blur(8px);
   border: none;
   cursor: pointer;
   font-size: 1.5rem;
@@ -335,7 +337,6 @@ body[data-theme='light'] .hero-glow {
   border-radius: 1.5rem;
   padding: 2rem;
   box-shadow: var(--shadow-soft);
-  backdrop-filter: blur(12px);
 }
 
 .hero-icon {
@@ -404,7 +405,6 @@ body[data-theme='light'] .hero-card {
 
 .action-btn {
   background: rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(12px);
   border: none;
   border-radius: 1rem;
   padding: 1.5rem;
@@ -472,7 +472,6 @@ body[data-theme='light'] .action-btn {
   display: inline-block;
   text-align: center;
   border: 1px solid rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(8px);
 }
 
 /* Default button styling for use outside verdict cards */
@@ -537,7 +536,6 @@ body[data-theme='light'] .action-btn {
 
 .last-scanned {
   background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(8px);
   border-radius: 0.75rem;
   padding: 1rem;
   text-align: center;
@@ -559,7 +557,6 @@ body[data-theme='light'] .action-btn {
 .quishing-btn {
   width: 100%;
   background: rgba(30, 41, 59, 0.5);
-  backdrop-filter: blur(8px);
   border: none;
   border-radius: 1rem;
   padding: 1rem;
@@ -589,7 +586,6 @@ body[data-theme='light'] .action-btn {
 
 .quishing-content {
   background: rgba(30, 41, 59, 0.5);
-  backdrop-filter: blur(8px);
   border-radius: 1rem;
   padding: 1.5rem;
   margin-bottom: 2rem;
@@ -693,7 +689,6 @@ body[data-theme='light'] .quishing-content p {
   position: relative;
   border-radius: 1.5rem;
   padding: 2rem;
-  backdrop-filter: blur(12px);
   border: 2px solid transparent;
   box-shadow: var(--shadow-soft);
   display: grid;
@@ -732,7 +727,6 @@ body[data-theme='light'] .quishing-content p {
 .warning-card {
   position: relative;
   background: linear-gradient(135deg, rgba(127, 29, 29, 0.9) 0%, rgba(153, 27, 27, 0.9) 100%);
-  backdrop-filter: blur(12px);
   border-radius: 1.5rem;
   padding: 2rem;
   border: 2px solid rgba(239, 68, 68, 0.5);
@@ -832,7 +826,6 @@ body[data-theme='light'] .quishing-content p {
 
 .score-chip {
   background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: var(--radius-md);
   padding: 0.6rem 0.9rem;
@@ -862,7 +855,6 @@ body[data-theme='light'] .quishing-content p {
   font-family: 'SFMono-Regular', ui-monospace, Menlo, Monaco, 'Courier New', monospace;
   font-size: 0.95rem;
   background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: var(--radius-md);
   padding: 0.75rem 1rem;
@@ -872,7 +864,6 @@ body[data-theme='light'] .quishing-content p {
 
 .drawer {
   background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(8px);
   border-radius: var(--radius-md);
   border: 1px solid rgba(255, 255, 255, 0.2);
   padding: 0.8rem 1rem;
@@ -913,7 +904,6 @@ body[data-theme='light'] .quishing-content p {
   border-radius: var(--radius-sm);
   border: 1px solid rgba(255, 255, 255, 0.2);
   background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(8px);
   padding: 0.7rem 0.85rem;
 }
 
@@ -961,7 +951,6 @@ body[data-theme='light'] .quishing-content p {
   gap: 0.65rem;
   align-items: flex-start;
   background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: var(--radius-sm);
   padding: 0.65rem 0.8rem;
@@ -993,7 +982,6 @@ body[data-theme='light'] .quishing-content p {
   border-radius: var(--radius-sm);
   border: 1px solid rgba(255, 255, 255, 0.2);
   background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(8px);
   padding: 0.75rem 0.9rem;
   display: grid;
   gap: 0.35rem;
@@ -1036,7 +1024,6 @@ body[data-theme='light'] .quishing-content p {
 
 .learn-more {
   background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: var(--radius-md);
   padding: 1rem 1.1rem;

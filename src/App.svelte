@@ -1085,8 +1085,9 @@
 
     const colors = ['pink', 'magenta', 'purple', 'blue', 'cyan', 'deep-purple'];
     // Sparse field: each particle self-recreates when its animation ends, so
-    // the population stays constant without any polling interval.
-    const particleCount = 48;
+    // the population stays constant without any polling interval. Kept small —
+    // each particle is its own compositor layer and glow shadows aren't free.
+    const particleCount = 24;
 
     function createParticle() {
       const particle = document.createElement('div');
@@ -2436,7 +2437,6 @@
 
   .input-url-section, .resolution-section {
     background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(8px);
     border-radius: 0.5rem;
     padding: 1rem;
     border: 1px solid rgba(255, 255, 255, 0.2);
@@ -2831,7 +2831,6 @@
     padding: 12px;
     background: rgba(255,255,255,0.1);
     border-radius: 8px;
-    backdrop-filter: blur(10px);
     transition: all 0.3s ease;
     border: 1px solid rgba(255,255,255,0.1);
   }
