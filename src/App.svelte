@@ -1159,10 +1159,13 @@
 
     // More robust approach for production environment
     const attemptScroll = (attempt = 1) => {
-      // Try multiple potential scroll targets in order of preference
+      // Scroll to the TOP of the results — the verdict banner holds the
+      // "Looks Safe" summary and the GO to Site button, so it must come first.
+      // Targeting the inner .results-card would scroll straight past both.
       const targets = [
-        '.results-card',              // Progressive Results Card (priority)
-        '.verdict-card',              // Verdict summary
+        '.verdict-card',              // Verdict summary (top of results)
+        '.multi-qr',                  // Multi-QR chooser (no verdict card yet)
+        '.results-card',              // Progressive Results Card
         '.content-panel',             // Content type panel
         '.analysis-complete'          // Fallback class
       ];
