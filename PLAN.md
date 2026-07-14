@@ -42,6 +42,17 @@ the remaining security gaps, and performance work on what's left.**
 > "Open site"; caution → copy-first + explicit two-step "Open anyway"; danger →
 > copy only. 8 resolver unit tests cover loop/timeout/max-hop/SSRF; verified
 > live against bit.ly and tinyurl.
+>
+> Hardened (audit follow-up): SSRF protection now resolves DNS names and
+> validates every A/AAAA result against non-public ranges (RFC1918, loopback,
+> link-local/metadata, CGNAT, multicast, IPv6 ULA/mapped/NAT64) inside a
+> pinning `lookup` on the undici Agent — the socket connects only to the
+> validated address, so DNS rebinding cannot swap in a private IP between
+> check and connect. Hops are probed with HEAD only; a 1-byte ranged GET is
+> sent solely when the server rejects HEAD (405/501), so final destinations
+> never receive an automatic content request. 61 resolver tests cover the
+> address-range matrix, rebinding/mixed-answer rejection, and HEAD/GET
+> method discipline.
 
 ### F1 (original spec). Redirect-chain expansion (`#13`) — highest correctness value
 
@@ -192,6 +203,14 @@ membership.
 > AbortController timeout; hung/failed signals degrade to "unknown"; the live
 > URLHaus lookup runs concurrently with the tiered analysis; 13 unit tests
 > cover ordering, timeout, and degradation. F1/F2 signals attach here.
+>
+> Hardened (audit follow-up): a failed threat-intel provider request —
+> which fulfills as `{ threatIntel: null }` via `Promise.allSettled` —
+> now degrades to an explicit "unavailable" result (`unavailable: true`,
+> warn badge in the UI) instead of rendering as "No threats detected".
+> The optional `VITE_API_BASE` fallback request is now bounded by the same
+> resolve timeout as every other call. A contract test exercises the real
+> fulfilled-null producer/consumer boundary.
 
 Tier-3 runs several independent network checks (Safe Browsing, URLHaus, redirect
 resolve, domain age). Run them concurrently with `Promise.allSettled` and per-signal

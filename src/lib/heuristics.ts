@@ -60,6 +60,8 @@ export interface HeuristicResult {
       message: string;
       threats: Array<{ source: string; details: string; score: number }>;
       sources_checked: string[];
+      /** True when the providers could not be reached — the result is unknown, not clean. */
+      unavailable?: boolean;
     };
     /** Non-URL payload checks (wifi/sms/tel/vcard/geo/mailto/text) — see payload-analysis.ts */
     payload?: {
@@ -455,7 +457,7 @@ export function formatHeuristicResults(result: HeuristicResult): FormattedHeuris
           detail: threat.details
         });
       });
-    } else if (enhancedIntel.message === 'Threat intelligence check failed') {
+    } else if (enhancedIntel.unavailable || enhancedIntel.message === 'Threat intelligence check failed') {
       threatStatus = statusOrder[threatStatus] < statusOrder['warn'] ? 'warn' : threatStatus;
       threatDetails.push('Threat intelligence checks could not be completed');
       upsertIntelSource({

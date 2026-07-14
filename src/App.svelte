@@ -1391,15 +1391,15 @@
       const intel = result.details.enhancedThreatIntel;
       tier3.push({
         label: 'Threat Intelligence',
-        status: intel.threat_detected ? 'fail' : 'pass',
+        status: intel.threat_detected ? 'fail' : intel.unavailable ? 'warn' : 'pass',
         detail: intel.message
       });
     } else {
-      // If no threat intel data, show default message
+      // No threat intel data at all: the check did not run — unknown, not clean
       tier3.push({
         label: 'Threat Intelligence',
-        status: 'pass',
-        detail: 'No threats detected'
+        status: 'warn',
+        detail: 'Threat intelligence unavailable'
       });
     }
 

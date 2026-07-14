@@ -77,9 +77,9 @@ export async function resolveChain(url: string): Promise<ResolveResponse> {
     return await resolveChainWithFallback(url);
   }
   try {
-    const response = await fetch(`${base}/resolve?url=${encodeURIComponent(url)}`, {
+    const response = await fetchWithTimeout(`${base}/resolve?url=${encodeURIComponent(url)}`, {
       headers: { accept: 'application/json' }
-    });
+    }, RESOLVE_TIMEOUT_MS);
     const data = await response.json();
     if (!validateResolveResponse(data)) throw new Error('Invalid API response');
     return data;

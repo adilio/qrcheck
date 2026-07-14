@@ -156,7 +156,29 @@ describe('concurrent tier2/tier3 harness', () => {
     expect(final.isComplete).toBe(true);
     expect(final.tier3!.details.domainAge?.message).toBe('Unable to determine domain age');
     expect(final.tier3!.details.enhancedThreatIntel?.message).toBe('Unable to complete threat intelligence checks');
+    expect(final.tier3!.details.enhancedThreatIntel?.unavailable).toBe(true);
     expect(final.verdict).toBe('safe');
+  });
+
+  it('marks intel as unavailable (never "no threats") on the real fulfilled { threatIntel: null } contract', async () => {
+    // checkAllThreatIntel uses Promise.allSettled internally: a failed provider
+    // request FULFILLS with threatIntel: null rather than rejecting. That null
+    // must degrade to unknown, not a clean result.
+    mockedIntel.mockResolvedValue({
+      domainAge: { age_days: 3650, risk_points: 0, message: 'Domain 3650 days old' },
+      threatIntel: null
+    });
+
+    const results = await collectAll(urlContent('https://example.com/'));
+    const final = results[results.length - 1];
+
+    expect(final.isComplete).toBe(true);
+    const intel = final.tier3!.details.enhancedThreatIntel;
+    expect(intel?.unavailable).toBe(true);
+    expect(intel?.message).not.toMatch(/no threats detected/i);
+    expect(intel?.message).toMatch(/unavailable/i);
+    // The healthy signal (domain age) still lands
+    expect(final.tier3!.details.domainAge?.age_days).toBe(3650);
   });
 
   it('bounds a hung tier3 signal with the harness timeout', async () => {

@@ -369,7 +369,8 @@ export async function collectTier3Signals(url: string): Promise<SignalDelta> {
       risk_points: 0,
       message: 'Unable to complete threat intelligence checks',
       threats: [],
-      sources_checked: []
+      sources_checked: [],
+      unavailable: true
     };
   };
 
@@ -405,12 +406,15 @@ export async function collectTier3Signals(url: string): Promise<SignalDelta> {
         delta.recommendations.push('Threat intelligence providers flagged this URL as malicious.');
       }
     } else {
+      // threatIntel: null means the provider request failed or hung — the
+      // result is UNKNOWN, never "no threats detected".
       delta.details.enhancedThreatIntel = {
         threat_detected: false,
         risk_points: 0,
-        message: 'No threats detected',
+        message: 'Threat intelligence unavailable — providers could not be reached',
         threats: [],
-        sources_checked: []
+        sources_checked: [],
+        unavailable: true
       };
     }
   } catch (_e) {
