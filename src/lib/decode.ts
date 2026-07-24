@@ -58,7 +58,7 @@ export async function decodeQRFromFile(file: File): Promise<string> {
 
 // Images larger than this are downscaled (preserving aspect ratio — a forced
 // square resize distorts QR modules and breaks decoding) before scanning.
-const MAX_DECODE_DIMENSION = 1600;
+const MAX_DECODE_DIMENSION = 2000;
 // Cap the find-and-mask loop per region so a pathological image can't spin.
 const MAX_CODES_PER_REGION = 6;
 
@@ -108,6 +108,43 @@ function tilePositions(dim: number, tile: number): number[] {
 }
 
 /**
+ * Re-scan overlapping tiles and full-width/-height strips (scales 1/2 and
+ * 1/3), optionally pre-processing each region before decoding. A phone photo
+ * of a screen showing small QR codes needs this per-tile, not just once on
+ * the full frame: a contrast fix that helps a small code can wash out
+ * unrelated parts of a busy frame, and the full-frame pass alone doesn't
+ * isolate the code the way a tile does.
+ */
+function sweepTiles(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  found: Set<string>,
+  prepare: (image: ImageData) => ImageData = (image) => image
+) {
+  for (const scale of [2, 3]) {
+    const tileW = Math.ceil(width / scale);
+    const tileH = Math.ceil(height / scale);
+    if (tileW < 60 || tileH < 60) continue;
+    const xs = tilePositions(width, tileW);
+    const ys = tilePositions(height, tileH);
+    for (const sy of ys) {
+      for (const sx of xs) {
+        const w = Math.min(tileW, width - sx);
+        const h = Math.min(tileH, height - sy);
+        collectCodesInRegion(prepare(ctx.getImageData(sx, sy, w, h)), found);
+      }
+    }
+    for (const sy of ys) {
+      collectCodesInRegion(prepare(ctx.getImageData(0, sy, width, Math.min(tileH, height - sy))), found);
+    }
+    for (const sx of xs) {
+      collectCodesInRegion(prepare(ctx.getImageData(sx, 0, Math.min(tileW, width - sx), height)), found);
+    }
+  }
+}
+
+/**
  * Decode all QR codes in an image file.
  *
  * jsQR fails outright on images containing several codes — competing finder
@@ -137,7 +174,10 @@ export async function decodeAllQRFromFile(file: File): Promise<string[]> {
 
   let bitmap: ImageBitmap;
   try {
-    bitmap = await createImageBitmap(file);
+    // Explicit so EXIF-rotated phone photos decode consistently across
+    // browsers that disagree on the spec's default (e.g. Firefox has
+    // historically defaulted to 'none' instead of 'from-image').
+    bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
     const largest = Math.max(bitmap.width, bitmap.height);
     if (largest > MAX_DECODE_DIMENSION) {
       const scale = MAX_DECODE_DIMENSION / largest;
@@ -181,26 +221,7 @@ export async function decodeAllQRFromFile(file: File): Promise<string[]> {
     // Pass 2: overlapping tiles and strips. Grid tiles isolate codes that
     // confuse the full-frame locator; strips catch codes jsQR only resolves
     // with the full extent of one axis present.
-    for (const scale of [2, 3]) {
-      const tileW = Math.ceil(width / scale);
-      const tileH = Math.ceil(height / scale);
-      if (tileW < 60 || tileH < 60) continue;
-      const xs = tilePositions(width, tileW);
-      const ys = tilePositions(height, tileH);
-      for (const sy of ys) {
-        for (const sx of xs) {
-          const w = Math.min(tileW, width - sx);
-          const h = Math.min(tileH, height - sy);
-          collectCodesInRegion(ctx.getImageData(sx, sy, w, h), found);
-        }
-      }
-      for (const sy of ys) {
-        collectCodesInRegion(ctx.getImageData(0, sy, width, Math.min(tileH, height - sy)), found);
-      }
-      for (const sx of xs) {
-        collectCodesInRegion(ctx.getImageData(sx, 0, Math.min(tileW, width - sx), height), found);
-      }
-    }
+    sweepTiles(ctx, width, height, found);
 
     // Pass 3 (nothing found yet): contrast/threshold variants on the full
     // frame for low-quality single-code photos. Rotation/inversion variants
@@ -210,6 +231,17 @@ export async function decodeAllQRFromFile(file: File): Promise<string[]> {
     }
     if (found.size === 0) {
       collectCodesInRegion(adaptiveThreshold(ctx.getImageData(0, 0, width, height)), found);
+    }
+
+    // Pass 4 (still nothing — e.g. a phone photo of a screen, where moiré
+    // and small QR codes against a busy background need both isolation and
+    // contrast fixing at once): re-run the tile sweep with each region
+    // contrast-enhanced first, since a fix that helps a small code can wash
+    // out the rest of a busy frame if only applied once, full-frame.
+    // (adaptiveThreshold is O(pixels × blockSize²) — too slow to repeat per
+    // tile, so only the cheap linear enhanceImageForQR runs at this stage.)
+    if (found.size === 0) {
+      sweepTiles(ctx, width, height, found, enhanceImageForQR);
     }
 
     if (found.size === 0) {
