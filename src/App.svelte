@@ -1169,7 +1169,7 @@
     // More robust approach for production environment
     const attemptScroll = (attempt = 1) => {
       // Scroll to the TOP of the results — the verdict banner holds the
-      // "Looks Safe" summary and the GO to Site button, so it must come first.
+      // "Looks Safe" summary and the Go to Site button, so it must come first.
       // Targeting the inner .results-card would scroll straight past both.
       const targets = [
         '.verdict-card',              // Verdict summary (top of results)
@@ -1688,7 +1688,7 @@
             target="_blank"
             rel="noopener noreferrer"
           >
-            GO to Site ↗
+            Go to Site ↗
           </a>
         {/if}
       </div>
@@ -3724,10 +3724,22 @@
       gap: 12px;
     }
 
+    .verdict-card {
+      gap: 0.75rem;
+    }
+
+    .verdict-summary {
+      margin-bottom: 0;
+    }
+
     .content-panel {
-      margin: 16px -16px;
+      margin: 8px -16px 0;
       border-radius: 0;
-      padding: 20px 16px;
+      padding: 16px 16px;
+    }
+
+    .content-panel h3 {
+      margin: 0 0 12px 0;
     }
 
     .content-card {
