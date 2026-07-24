@@ -604,6 +604,7 @@
         flow = 'idle';
         step = '';
         showProgressSection = false;
+        scrollToResults();
         return;
       }
       await processDecoded(codes[0]);
@@ -958,6 +959,7 @@
     // several codes in view means nothing is analyzed until the user picks one.
     stopCameraScan();
     multiQrCodes = codes;
+    scrollToResults();
   }
 
   function scheduleScan() {
