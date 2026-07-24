@@ -2065,9 +2065,9 @@
           <p class="footer-privacy-line">No tracking or user data collected.</p>
         </div>
         <div class="footer-links">
-          <span class="footer-credit"><strong>QRCheck</strong> · a 4dl app by Adil Leghari</span>
+          <span class="footer-credit">A 4dl project by Adil Leghari</span>
           <span class="footer-actions">
-            <a href="https://4dl.ca" class="footer-link">More 4dl apps</a>
+            <a href="https://4dl.ca" class="footer-link">Explore 4dl</a>
             <span class="footer-separator" aria-hidden="true"> · </span>
             <a href="https://github.com/adilio/qrcheck" target="_blank" rel="noopener noreferrer" class="footer-link">Source</a>
           </span>

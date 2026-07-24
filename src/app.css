@@ -1141,10 +1141,6 @@ body[data-theme='light'] .quishing-content p {
   color: var(--text-muted);
 }
 
-.footer-credit strong {
-  color: var(--text-primary);
-}
-
 .entry-backdrop {
   position: fixed;
   inset: 0;
