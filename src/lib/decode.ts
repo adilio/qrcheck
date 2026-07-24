@@ -38,17 +38,17 @@ export interface QRContent {
   };
 }
 
-export function decodeQRFromImageData(image: ImageData): string {
-  if (!jsQR) {
-    // Camera frames can arrive before the lazy chunk lands; the scan loop
-    // treats this like any other frame without a code and retries.
-    throw new Error('QR decoder is still loading');
-  }
-  const code = jsQR(image.data, image.width, image.height);
-  if (!code) {
-    throw new Error('No QR code found');
-  }
-  return code.data.trim();
+/**
+ * Decode every code visible in one frame's worth of image data (e.g. a live
+ * camera capture), using the same find-and-mask loop as the file-upload path.
+ * Unlike decodeAllQRFromFile, this skips the tiling/contrast passes — those
+ * are too slow to run every animation frame, and a live feed gets another
+ * shot at the next frame anyway. Mutates the passed ImageData.
+ */
+export function decodeAllQRFromImageData(image: ImageData): string[] {
+  const found = new Set<string>();
+  collectCodesInRegion(image, found);
+  return Array.from(found);
 }
 
 export async function decodeQRFromFile(file: File): Promise<string> {

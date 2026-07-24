@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from 'svelte';
   import { DEV_ENABLE_MANUAL_URL } from './lib/flags';
-  import { decodeAllQRFromFile, decodeQRFromImageData, ensureDecoderLoaded, parseQRContent, type QRContent } from './lib/decode';
+  import { decodeAllQRFromFile, decodeAllQRFromImageData, ensureDecoderLoaded, parseQRContent, type QRContent } from './lib/decode';
   import {
     formatHeuristicResults,
     type CheckStatus,
@@ -953,6 +953,13 @@
     await analyzeFromText(raw);
   }
 
+  function handleCameraMultiDetection(codes: string[]) {
+    // Same consent model as the file-upload and embedded-link choosers:
+    // several codes in view means nothing is analyzed until the user picks one.
+    stopCameraScan();
+    multiQrCodes = codes;
+  }
+
   function scheduleScan() {
     scanFrameHandle = requestAnimationFrame(() => {
       void scanFrame();
@@ -972,12 +979,14 @@
           captureCanvas.height = height;
           captureCtx.drawImage(videoEl, 0, 0, width, height);
           const image = captureCtx.getImageData(0, 0, width, height);
-          try {
-            const raw = decodeQRFromImageData(image);
-            await handleCameraDetection(raw);
+          const codes = decodeAllQRFromImageData(image);
+          if (codes.length > 1) {
+            handleCameraMultiDetection(codes);
             return;
-          } catch {
-            // continue scanning
+          }
+          if (codes.length === 1) {
+            await handleCameraDetection(codes[0]);
+            return;
           }
         }
       }
@@ -1638,7 +1647,7 @@
        analyzed until the user explicitly picks one -->
   {#if multiQrCodes.length > 1}
     <section class="embedded-urls multi-qr" aria-live="polite">
-      <h3>🔳 {multiQrCodes.length} QR codes found in this image</h3>
+      <h3>🔳 {multiQrCodes.length} QR codes found</h3>
       <p class="embedded-urls-hint">Choose which code to analyze — nothing is checked until you pick one.</p>
       <ul class="embedded-url-list">
         {#each multiQrCodes as code, index (code)}
