@@ -58,7 +58,14 @@ export async function decodeQRFromFile(file: File): Promise<string> {
 
 // Images larger than this are downscaled (preserving aspect ratio — a forced
 // square resize distorts QR modules and breaks decoding) before scanning.
-const MAX_DECODE_DIMENSION = 2000;
+// Most uploads decode fine at this size, so it's the only pass that runs for
+// the common case; FALLBACK_DECODE_DIMENSION only kicks in on failure.
+const MAX_DECODE_DIMENSION = 1600;
+// Retried only when the fast pass above finds nothing — a phone photo of a
+// screen with small QR codes needs the extra pixel detail, but re-running
+// every tile at this size unconditionally would slow down every upload for
+// a case that's rare in practice.
+const FALLBACK_DECODE_DIMENSION = 2200;
 // Cap the find-and-mask loop per region so a pathological image can't spin.
 const MAX_CODES_PER_REGION = 6;
 
@@ -120,9 +127,10 @@ function sweepTiles(
   width: number,
   height: number,
   found: Set<string>,
-  prepare: (image: ImageData) => ImageData = (image) => image
+  prepare: (image: ImageData) => ImageData = (image) => image,
+  scales: number[] = [2, 3]
 ) {
-  for (const scale of [2, 3]) {
+  for (const scale of scales) {
     const tileW = Math.ceil(width / scale);
     const tileH = Math.ceil(height / scale);
     if (tileW < 60 || tileH < 60) continue;
@@ -178,17 +186,6 @@ export async function decodeAllQRFromFile(file: File): Promise<string[]> {
     // browsers that disagree on the spec's default (e.g. Firefox has
     // historically defaulted to 'none' instead of 'from-image').
     bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
-    const largest = Math.max(bitmap.width, bitmap.height);
-    if (largest > MAX_DECODE_DIMENSION) {
-      const scale = MAX_DECODE_DIMENSION / largest;
-      const resized = await createImageBitmap(bitmap, {
-        resizeWidth: Math.round(bitmap.width * scale),
-        resizeHeight: Math.round(bitmap.height * scale),
-        resizeQuality: 'high'
-      });
-      bitmap.close();
-      bitmap = resized;
-    }
   } catch (err) {
     console.error('Failed to create image bitmap for QR decode', err);
     throw new Error('Unable to process this image. Please try a different image format.');
@@ -199,33 +196,71 @@ export async function decodeAllQRFromFile(file: File): Promise<string[]> {
     throw new Error('Image is too small to contain a QR code');
   }
 
-  const canvas = document.createElement('canvas');
-  canvas.width = bitmap.width;
-  canvas.height = bitmap.height;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  if (!ctx) {
-    throw new Error('Canvas 2D context unavailable');
-  }
-
   await decoderReady;
 
+  // Draws (downscaling if needed) into a fresh canvas at the given cap.
+  // Reused for the fast first attempt and, only on failure, a slower retry
+  // at higher resolution — see decodeAtScale below.
+  async function prepareCanvas(maxDim: number) {
+    const largest = Math.max(bitmap.width, bitmap.height);
+    let source = bitmap;
+    let resized: ImageBitmap | null = null;
+    if (largest > maxDim) {
+      const scale = maxDim / largest;
+      resized = await createImageBitmap(bitmap, {
+        resizeWidth: Math.round(bitmap.width * scale),
+        resizeHeight: Math.round(bitmap.height * scale),
+        resizeQuality: 'high'
+      });
+      source = resized;
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = source.width;
+    canvas.height = source.height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) {
+      resized?.close();
+      throw new Error('Canvas 2D context unavailable');
+    }
+    ctx.drawImage(source, 0, 0);
+    resized?.close();
+    return { ctx, width: canvas.width, height: canvas.height };
+  }
+
   try {
-    ctx.drawImage(bitmap, 0, 0);
-    const width = canvas.width;
-    const height = canvas.height;
     const found = new Set<string>();
 
-    // Pass 1: full frame, find-and-mask
+    // Fast pass: full frame, at the size that decodes the vast majority of
+    // uploads. A clean multi-code image (not a confusing photo) is usually
+    // fully resolved right here via the mask-and-retry loop in
+    // collectCodesInRegion, in well under a second.
+    let { ctx, width, height } = await prepareCanvas(MAX_DECODE_DIMENSION);
     collectCodesInRegion(ctx.getImageData(0, 0, width, height), found);
 
-    // Pass 2: overlapping tiles and strips. Grid tiles isolate codes that
-    // confuse the full-frame locator; strips catch codes jsQR only resolves
-    // with the full extent of one axis present.
-    sweepTiles(ctx, width, height, found);
+    // Tile/strip sweep — only when the full frame didn't already resolve a
+    // multi-code payload. This is the expensive pass (dozens of overlapping
+    // regions, each a full jsQR search), needed for images where competing
+    // finder patterns confuse the full-frame locator; skipping it once
+    // find-and-mask already recovered 2+ codes avoids paying that cost for
+    // the common case where it wouldn't add anything.
+    if (found.size < 2) {
+      sweepTiles(ctx, width, height, found);
+    }
 
-    // Pass 3 (nothing found yet): contrast/threshold variants on the full
-    // frame for low-quality single-code photos. Rotation/inversion variants
-    // aren't needed — jsQR is orientation-invariant and tries both polarities.
+    // Slow retry (nothing found, and the fast pass actually downscaled):
+    // re-run the same sweep at higher resolution for phone photos with
+    // small QR codes against a busy background, where the fast cap loses
+    // too much detail. Skipped entirely for images that were never
+    // downscaled, since a retry would just repeat the same pixels.
+    if (found.size === 0 && Math.max(bitmap.width, bitmap.height) > MAX_DECODE_DIMENSION) {
+      ({ ctx, width, height } = await prepareCanvas(FALLBACK_DECODE_DIMENSION));
+      collectCodesInRegion(ctx.getImageData(0, 0, width, height), found);
+      sweepTiles(ctx, width, height, found);
+    }
+
+    // Contrast/threshold variants on the full frame for low-quality
+    // single-code photos. Rotation/inversion variants aren't needed — jsQR
+    // is orientation-invariant and tries both polarities.
     if (found.size === 0) {
       collectCodesInRegion(enhanceImageForQR(ctx.getImageData(0, 0, width, height)), found);
     }
@@ -233,9 +268,9 @@ export async function decodeAllQRFromFile(file: File): Promise<string[]> {
       collectCodesInRegion(adaptiveThreshold(ctx.getImageData(0, 0, width, height)), found);
     }
 
-    // Pass 4 (still nothing — e.g. a phone photo of a screen, where moiré
-    // and small QR codes against a busy background need both isolation and
-    // contrast fixing at once): re-run the tile sweep with each region
+    // Still nothing — e.g. a phone photo of a screen, where moiré and small
+    // QR codes against a busy background need both isolation and contrast
+    // fixing at once: re-run the tile sweep with each region
     // contrast-enhanced first, since a fix that helps a small code can wash
     // out the rest of a busy frame if only applied once, full-frame.
     // (adaptiveThreshold is O(pixels × blockSize²) — too slow to repeat per
