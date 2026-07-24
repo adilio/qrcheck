@@ -2065,12 +2065,11 @@
           <p class="footer-privacy-line">No tracking or user data collected.</p>
         </div>
         <div class="footer-links">
-          <a href="https://github.com/adilio/qrcheck" target="_blank" rel="noopener noreferrer" class="footer-link">
-            View on GitHub
-          </a>
-          <span class="footer-separator">•</span>
-          <span class="footer-credit">
-            Made with 💜 in 🇨🇦 by <a href="https://github.com/adilio" target="_blank" rel="noopener noreferrer" class="footer-link">Adil Leghari</a>
+          <span class="footer-credit"><strong>QRCheck</strong> · a 4dl app by Adil Leghari</span>
+          <span class="footer-actions">
+            <a href="https://4dl.ca" class="footer-link">More 4dl apps</a>
+            <span class="footer-separator" aria-hidden="true"> · </span>
+            <a href="https://github.com/adilio/qrcheck" target="_blank" rel="noopener noreferrer" class="footer-link">Source</a>
           </span>
         </div>
       </div>

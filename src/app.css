@@ -1108,8 +1108,12 @@ body[data-theme='light'] .quishing-content p {
 
 .footer-links {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.35rem;
+  width: 100%;
+  padding-top: 1rem;
+  border-top: 1px solid var(--surface-border);
   font-size: 0.875rem;
   color: var(--text-muted);
   flex-wrap: wrap;
@@ -1135,6 +1139,10 @@ body[data-theme='light'] .quishing-content p {
 
 .footer-credit {
   color: var(--text-muted);
+}
+
+.footer-credit strong {
+  color: var(--text-primary);
 }
 
 .entry-backdrop {
