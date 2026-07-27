@@ -60,7 +60,12 @@ export async function readClipboardPayload(source?: ClipboardSource): Promise<Cl
 
 export function imageFileFromPaste(data: DataTransfer): File | null {
   const imageItem = Array.from(data.items || []).find((item) => item.type.startsWith('image/'));
-  return imageItem?.getAsFile() ?? null;
+  const fromItems = imageItem?.getAsFile() ?? null;
+  if (fromItems) return fromItems;
+
+  // Safari — iOS especially — often reports an empty `items` list while still
+  // exposing the pasted image on `files`.
+  return Array.from(data.files || []).find((file) => file.type.startsWith('image/')) ?? null;
 }
 
 export function isEditablePasteTarget(target: EventTarget | null): boolean {
@@ -71,6 +76,17 @@ export function isEditablePasteTarget(target: EventTarget | null): boolean {
       : null;
 
   return Boolean(element?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])'));
+}
+
+// Failures the manual paste box can still rescue: the browser either has no
+// readable clipboard API, refused the programmatic read, or handed back nothing.
+export function isRecoverableClipboardError(error: unknown): boolean {
+  if (error instanceof ClipboardUnavailableError) return true;
+
+  return (
+    error instanceof DOMException &&
+    (error.name === 'NotAllowedError' || error.name === 'SecurityError' || error.name === 'NotFoundError')
+  );
 }
 
 export function clipboardErrorMessage(error: unknown): string {

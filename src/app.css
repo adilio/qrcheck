@@ -398,7 +398,7 @@ body[data-theme='light'] .hero-card {
 
 .action-buttons {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
   margin-bottom: 0.85rem;
 }
@@ -420,6 +420,15 @@ body[data-theme='light'] .hero-card {
   min-width: 0;
 }
 
+/* Camera is the headline action; Upload and Paste share the row beneath it. */
+.action-btn-primary {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  justify-content: center;
+  gap: 0.85rem;
+  padding: 1.15rem 1.5rem;
+}
+
 .action-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.3);
   transform: scale(1.05);
@@ -437,6 +446,57 @@ body[data-theme='light'] .hero-card {
 
 body[data-theme='light'] .action-btn {
   color: #0f172a;
+}
+
+.paste-fallback {
+  margin: 0 auto 1rem;
+  max-width: 30rem;
+  text-align: center;
+}
+
+.paste-fallback-copy {
+  margin: 0 0 0.65rem;
+  color: #f8fafc;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  text-wrap: balance;
+}
+
+.paste-catcher {
+  min-height: 4.5rem;
+  padding: 1rem;
+  border: 2px dashed rgba(255, 255, 255, 0.55);
+  border-radius: 0.85rem;
+  background: rgba(255, 255, 255, 0.14);
+  color: white;
+  font-size: 1rem;
+  overflow: hidden;
+}
+
+.paste-catcher:focus {
+  outline: 2px solid white;
+  outline-offset: 2px;
+}
+
+.paste-fallback-cancel {
+  margin-top: 0.6rem;
+  padding: 0.35rem 0.9rem;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+body[data-theme='light'] .paste-fallback-copy,
+body[data-theme='light'] .paste-catcher,
+body[data-theme='light'] .paste-fallback-cancel {
+  color: #0f172a;
+}
+
+body[data-theme='light'] .paste-catcher {
+  border-color: rgba(15, 23, 42, 0.4);
 }
 
 .paste-hint {
@@ -1483,6 +1543,11 @@ input::placeholder {
     gap: 0.5rem;
     padding: 1rem 0.45rem;
     font-size: 0.95rem;
+  }
+
+  .action-btn-primary {
+    gap: 0.7rem;
+    padding: 0.95rem 1rem;
   }
 
   .action-btn svg {

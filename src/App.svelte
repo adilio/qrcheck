@@ -23,6 +23,7 @@
     clipboardErrorMessage,
     imageFileFromPaste,
     isEditablePasteTarget,
+    isRecoverableClipboardError,
     readClipboardPayload
   } from './lib/clipboard';
 
@@ -193,6 +194,12 @@
   let learnMoreOpen = false;
   let manualUrlOpen = false;
   let entryFileInput: HTMLInputElement | null = null;
+  // Manual paste target. iOS Safari resolves navigator.clipboard.read() without
+  // ever exposing an image/* flavour for content copied outside the browser, so
+  // the only path that reaches the pasteboard there is a real paste event fired
+  // at a focused editable element.
+  let pasteCatcher: HTMLElement | null = null;
+  let pasteFallbackOpen = false;
   let videoEl: HTMLVideoElement | null = null;
   let stream: MediaStream | null = null;
   let videoErrorHandler: ((e: Event) => void) | null = null;
@@ -1018,7 +1025,7 @@
     try {
       const payload = await readClipboardPayload(navigator.clipboard);
       if (!payload) {
-        clipboardError = 'Nothing usable was found. Copy a QR image or URL, then try again.';
+        openPasteFallback();
         return;
       }
 
@@ -1032,23 +1039,63 @@
         await analyzeFromText(payload.text);
       }
     } catch (err: unknown) {
-      clipboardError = clipboardErrorMessage(err);
+      if (isRecoverableClipboardError(err)) {
+        openPasteFallback();
+      } else {
+        clipboardError = clipboardErrorMessage(err);
+      }
     } finally {
       clipboardReading = false;
     }
   }
 
+  // Shown when the browser will not hand over the clipboard programmatically.
+  // Focusing a contenteditable is what makes iOS offer its native Paste callout.
+  async function openPasteFallback() {
+    clipboardError = '';
+    pasteFallbackOpen = true;
+    await tick();
+
+    if (!pasteCatcher) return;
+    pasteCatcher.focus();
+
+    const range = document.createRange();
+    range.selectNodeContents(pasteCatcher);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  }
+
+  function closePasteFallback() {
+    pasteFallbackOpen = false;
+    if (pasteCatcher) pasteCatcher.textContent = '';
+  }
+
   async function handlePasteEvent(event: ClipboardEvent) {
-    if (busy || isEditablePasteTarget(event.target)) return;
+    if (busy) return;
+
+    // The fallback box is deliberately editable, so it must not be skipped the
+    // way a real text field would be.
+    const intoCatcher = Boolean(
+      pasteCatcher && event.target instanceof Node && pasteCatcher.contains(event.target)
+    );
+    if (!intoCatcher && isEditablePasteTarget(event.target)) return;
 
     const data = event.clipboardData;
     if (!data) return;
 
     const image = imageFileFromPaste(data);
     const text = data.getData('text/plain').trim();
-    if (!image && !text) return;
+    if (!image && !text) {
+      if (intoCatcher) {
+        event.preventDefault();
+        clipboardError = 'That paste had no image or link in it. Copy the QR image again, or use Upload.';
+      }
+      return;
+    }
 
     event.preventDefault();
+    closePasteFallback();
     clipboardError = '';
     clipboardReading = true;
 
@@ -1565,7 +1612,7 @@
         <p class="hero-subtitle">Know before you scan. Quick, free, private safety check.</p>
 
         <div class="action-buttons" role="group" aria-label="QR input options" aria-describedby="paste-hint">
-          <button class="action-btn" type="button" on:click={() => void startCameraScan()} disabled={busy || scanning}>
+          <button class="action-btn action-btn-primary" type="button" on:click={() => void startCameraScan()} disabled={busy || scanning}>
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
@@ -1592,7 +1639,25 @@
             <span>{clipboardReading ? 'Reading…' : 'Paste'}</span>
           </button>
         </div>
-        <p class="paste-hint" id="paste-hint">Paste a QR screenshot anywhere on this page. Images stay on your device.</p>
+        {#if pasteFallbackOpen}
+          <div class="paste-fallback">
+            <p class="paste-fallback-copy">
+              This browser won't hand over the clipboard on its own. Long-press the box below and choose
+              <strong>Paste</strong>.
+            </p>
+            <div
+              class="paste-catcher"
+              contenteditable="true"
+              role="textbox"
+              tabindex="0"
+              aria-label="Paste your copied QR image here"
+              bind:this={pasteCatcher}
+            ></div>
+            <button class="paste-fallback-cancel" type="button" on:click={closePasteFallback}>Cancel</button>
+          </div>
+        {/if}
+
+        <p class="paste-hint" id="paste-hint">Tap Paste, or press ⌘V / Ctrl+V anywhere on this page. Images stay on your device.</p>
 
         {#if originalInputUrl && flow === 'complete'}
           <div class="last-scanned">

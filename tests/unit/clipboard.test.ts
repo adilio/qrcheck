@@ -4,6 +4,7 @@ import {
   clipboardErrorMessage,
   imageFileFromPaste,
   isEditablePasteTarget,
+  isRecoverableClipboardError,
   readClipboardPayload
 } from '../../src/lib/clipboard';
 
@@ -88,6 +89,20 @@ describe('paste-event helpers', () => {
     expect(imageFileFromPaste(transfer)).toBeNull();
   });
 
+  it('falls back to DataTransfer.files when items is empty', () => {
+    const file = new File(['qr-image'], 'pasted.png', { type: 'image/png' });
+    const transfer = { items: [], files: [file] } as unknown as DataTransfer;
+
+    expect(imageFileFromPaste(transfer)).toBe(file);
+  });
+
+  it('ignores non-image files on DataTransfer.files', () => {
+    const file = new File(['not-an-image'], 'notes.txt', { type: 'text/plain' });
+    const transfer = { items: [], files: [file] } as unknown as DataTransfer;
+
+    expect(imageFileFromPaste(transfer)).toBeNull();
+  });
+
   it('recognizes editable paste targets and their descendants', () => {
     const input = document.createElement('input');
     const editor = document.createElement('div');
@@ -98,6 +113,21 @@ describe('paste-event helpers', () => {
     expect(isEditablePasteTarget(input)).toBe(true);
     expect(isEditablePasteTarget(child)).toBe(true);
     expect(isEditablePasteTarget(document.createElement('button'))).toBe(false);
+  });
+});
+
+describe('isRecoverableClipboardError', () => {
+  it('treats a missing clipboard API as recoverable', () => {
+    expect(isRecoverableClipboardError(new ClipboardUnavailableError())).toBe(true);
+  });
+
+  it('treats a refused read as recoverable', () => {
+    expect(isRecoverableClipboardError(new DOMException('nope', 'NotAllowedError'))).toBe(true);
+    expect(isRecoverableClipboardError(new DOMException('gone', 'NotFoundError'))).toBe(true);
+  });
+
+  it('does not swallow unexpected failures', () => {
+    expect(isRecoverableClipboardError(new TypeError('boom'))).toBe(false);
   });
 });
 

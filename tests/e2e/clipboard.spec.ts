@@ -70,7 +70,7 @@ test('paste inside an editable field is left to the field', async ({ page }) => 
   await expect(page.locator('.results-card')).toHaveCount(0);
 });
 
-test('clipboard permission errors explain the upload fallback', async ({ page }) => {
+test('a refused clipboard read offers the manual paste box', async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
@@ -85,8 +85,55 @@ test('clipboard permission errors explain the upload fallback', async ({ page })
   await page.goto('/');
   await page.getByRole('button', { name: 'Paste' }).click();
 
-  await expect(page.getByText('Clipboard access was denied.')).toBeVisible();
-  await expect(page.getByText(/use Upload/)).toBeVisible();
+  const catcher = page.getByRole('textbox', { name: 'Paste your copied QR image here' });
+  await expect(catcher).toBeVisible();
+  await expect(catcher).toBeFocused();
+
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  await expect(catcher).toHaveCount(0);
+});
+
+test('a clipboard that reads but exposes nothing offers the manual paste box', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { read: async () => [] }
+    });
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Paste' }).click();
+
+  await expect(page.getByRole('textbox', { name: 'Paste your copied QR image here' })).toBeVisible();
+});
+
+test('an image pasted into the manual box is decoded', async ({ page }) => {
+  const bytes = await qrBytes();
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { read: async () => [] }
+    });
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Paste' }).click();
+
+  const catcher = page.getByRole('textbox', { name: 'Paste your copied QR image here' });
+  await expect(catcher).toBeVisible();
+
+  await page.evaluate((imageBytes) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([new Uint8Array(imageBytes)], 'pasted.png', { type: 'image/png' }));
+    document.querySelector('.paste-catcher')!.dispatchEvent(new ClipboardEvent('paste', {
+      bubbles: true,
+      cancelable: true,
+      clipboardData: transfer
+    }));
+  }, bytes);
+
+  await expect(catcher).toHaveCount(0);
+  await expect(page.locator('.results-card')).toBeVisible({ timeout: 15000 });
 });
 
 test('clipboard actions remain usable at a narrow mobile viewport', async ({ page }) => {
