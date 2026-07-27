@@ -152,6 +152,47 @@ function sweepTiles(
   }
 }
 
+// How many codes we keep escalating for. Nothing in the image tells us how
+// many are actually present, so "found one, stop" would silently drop the
+// second code in a two-code photo — the escalation has to keep going until a
+// pass proves there is more than one, or the ladder runs out.
+const MULTI_CODE_TARGET = 2;
+
+/**
+ * The escalation ladder, run against one prepared canvas. Ordered cheapest and
+ * highest-yield first, and stops as soon as it has more than one code.
+ *
+ * Contrast-enhanced tiles come *before* untouched tiles deliberately: on a
+ * photo of a screen, binarizing first both decodes more (moiré defeats the
+ * untouched pass) and runs several times faster, because jsQR's locator
+ * rejects a binarized empty tile far sooner than a noisy one.
+ */
+function runDecodePasses(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  found: Set<string>
+) {
+  const frame = () => ctx.getImageData(0, 0, width, height);
+
+  collectCodesInRegion(frame(), found);
+  if (found.size >= MULTI_CODE_TARGET) return;
+
+  collectCodesInRegion(enhanceImageForQR(frame()), found);
+  if (found.size >= MULTI_CODE_TARGET) return;
+
+  sweepTiles(ctx, width, height, found, enhanceImageForQR);
+  if (found.size >= MULTI_CODE_TARGET) return;
+
+  sweepTiles(ctx, width, height, found);
+  if (found.size > 0) return;
+
+  // Last resort for a single stubborn code. adaptiveThreshold is
+  // O(pixels × blockSize²), so it only runs once, full-frame, and only when
+  // everything above came back empty.
+  collectCodesInRegion(adaptiveThreshold(frame()), found);
+}
+
 /**
  * Decode all QR codes in an image file.
  *
@@ -230,53 +271,15 @@ export async function decodeAllQRFromFile(file: File): Promise<string[]> {
   try {
     const found = new Set<string>();
 
-    // Fast pass: full frame, at the size that decodes the vast majority of
-    // uploads. A clean multi-code image (not a confusing photo) is usually
-    // fully resolved right here via the mask-and-retry loop in
-    // collectCodesInRegion, in well under a second.
     let { ctx, width, height } = await prepareCanvas(MAX_DECODE_DIMENSION);
-    collectCodesInRegion(ctx.getImageData(0, 0, width, height), found);
+    runDecodePasses(ctx, width, height, found);
 
-    // Tile/strip sweep — only when the full frame didn't already resolve a
-    // multi-code payload. This is the expensive pass (dozens of overlapping
-    // regions, each a full jsQR search), needed for images where competing
-    // finder patterns confuse the full-frame locator; skipping it once
-    // find-and-mask already recovered 2+ codes avoids paying that cost for
-    // the common case where it wouldn't add anything.
-    if (found.size < 2) {
-      sweepTiles(ctx, width, height, found);
-    }
-
-    // Slow retry (nothing found, and the fast pass actually downscaled):
-    // re-run the same sweep at higher resolution for phone photos with
-    // small QR codes against a busy background, where the fast cap loses
-    // too much detail. Skipped entirely for images that were never
+    // Slow retry at higher resolution, for phone photos whose codes are too
+    // small to survive the fast cap. Skipped for images that were never
     // downscaled, since a retry would just repeat the same pixels.
     if (found.size === 0 && Math.max(bitmap.width, bitmap.height) > MAX_DECODE_DIMENSION) {
       ({ ctx, width, height } = await prepareCanvas(FALLBACK_DECODE_DIMENSION));
-      collectCodesInRegion(ctx.getImageData(0, 0, width, height), found);
-      sweepTiles(ctx, width, height, found);
-    }
-
-    // Contrast/threshold variants on the full frame for low-quality
-    // single-code photos. Rotation/inversion variants aren't needed — jsQR
-    // is orientation-invariant and tries both polarities.
-    if (found.size === 0) {
-      collectCodesInRegion(enhanceImageForQR(ctx.getImageData(0, 0, width, height)), found);
-    }
-    if (found.size === 0) {
-      collectCodesInRegion(adaptiveThreshold(ctx.getImageData(0, 0, width, height)), found);
-    }
-
-    // Still nothing — e.g. a phone photo of a screen, where moiré and small
-    // QR codes against a busy background need both isolation and contrast
-    // fixing at once: re-run the tile sweep with each region
-    // contrast-enhanced first, since a fix that helps a small code can wash
-    // out the rest of a busy frame if only applied once, full-frame.
-    // (adaptiveThreshold is O(pixels × blockSize²) — too slow to repeat per
-    // tile, so only the cheap linear enhanceImageForQR runs at this stage.)
-    if (found.size === 0) {
-      sweepTiles(ctx, width, height, found, enhanceImageForQR);
+      runDecodePasses(ctx, width, height, found);
     }
 
     if (found.size === 0) {
