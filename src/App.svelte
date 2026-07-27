@@ -19,6 +19,12 @@
   import InstallPrompt from './components/InstallPrompt.svelte';
   import { handleShareTarget } from './lib/share-handler';
   import { triggerInstallPromptAfterScan } from './lib/install-prompt';
+  import {
+    clipboardErrorMessage,
+    imageFileFromPaste,
+    isEditablePasteTarget,
+    readClipboardPayload
+  } from './lib/clipboard';
 
   type VerdictKey = 'SAFE' | 'WARN' | 'BLOCK';
   type IntelStatus = 'clean' | 'warn' | 'block' | 'info' | 'error';
@@ -183,6 +189,7 @@
   let detailsOpen = false;
 
   let scanning = false;
+  let clipboardReading = false;
   let learnMoreOpen = false;
   let manualUrlOpen = false;
   let entryFileInput: HTMLInputElement | null = null;
@@ -200,8 +207,8 @@
 
   $: verdictMetaInfo = heuristicsResult ? verdictMeta[getVerdictFromHeuristics()] : null;
   $: intelCards = buildIntelCards(intelRes, formattedHeuristics?.intelSources || []);
-  $: busy = flow === 'processing';
-  $: alerts = buildAlerts();
+  $: busy = flow === 'processing' || clipboardReading;
+  $: alerts = buildAlerts(cameraError, clipboardError, error);
   $: terminalUrl = hops.length ? hops[hops.length - 1] : '';
   $: redirectCount = Math.max(hops.length - 1, 0);
   $: flaggedChecks = formattedHeuristics
@@ -262,29 +269,29 @@
   }
 
 
-  function buildAlerts(): Alert[] {
+  function buildAlerts(cameraMessage: string, clipboardMessage: string, analysisMessage: string): Alert[] {
     const items: Alert[] = [];
-    if (cameraError) {
+    if (cameraMessage) {
       items.push({
         id: 'camera',
         tone: 'error',
-        message: cameraError,
+        message: cameraMessage,
         hint: 'Check browser permissions or switch to the upload option.'
       });
     }
-    if (clipboardError) {
+    if (clipboardMessage) {
       items.push({
         id: 'clipboard',
         tone: 'warn',
-        message: clipboardError,
+        message: clipboardMessage,
         hint: 'Try copying the QR again or use the file upload.'
       });
     }
-    if (error) {
+    if (analysisMessage) {
       items.push({
         id: 'analysis',
         tone: 'error',
-        message: error
+        message: analysisMessage
       });
     }
     return items;
@@ -1003,59 +1010,62 @@
   }
 
   async function pasteFromClipboard() {
+    if (busy) return;
+
     clipboardError = '';
-    if (!navigator.clipboard) {
-      clipboardError = 'Clipboard access is not available. Use upload instead.';
-      return;
-    }
+    clipboardReading = true;
+
     try {
-      if (navigator.clipboard.read) {
-        const items = await navigator.clipboard.read();
-        for (const item of items) {
-          for (const type of item.types) {
-            if (type.startsWith('image/')) {
-              const blob = await item.getType(type);
-              const file = new File([blob], `clipboard.${type.split('/')[1] || 'png'}`, { type });
-              await processFile(file);
-              return;
-            }
-          }
-        }
+      const payload = await readClipboardPayload(navigator.clipboard);
+      if (!payload) {
+        clipboardError = 'Nothing usable was found. Copy a QR image or URL, then try again.';
+        return;
       }
-      if (navigator.clipboard.readText) {
-        const text = (await navigator.clipboard.readText())?.trim();
-        if (text) {
-          await analyzeFromText(text);
-          return;
-        }
+
+      if (scanning) {
+        stopCameraScan('idle');
       }
-      clipboardError = 'Clipboard did not contain a QR image or URL. Try copying it again or use upload.';
-    } catch (err: any) {
-      clipboardError = `${err?.message || 'Unable to read the clipboard.'} Grant access or try the upload option.`;
+
+      if (payload.kind === 'image') {
+        await processFile(payload.file);
+      } else {
+        await analyzeFromText(payload.text);
+      }
+    } catch (err: unknown) {
+      clipboardError = clipboardErrorMessage(err);
+    } finally {
+      clipboardReading = false;
     }
   }
 
   async function handlePasteEvent(event: ClipboardEvent) {
+    if (busy || isEditablePasteTarget(event.target)) return;
+
     const data = event.clipboardData;
     if (!data) return;
-    const items = Array.from(data.items || []);
-    const imageItem = items.find((item) => item.type.startsWith('image/'));
+
+    const image = imageFileFromPaste(data);
+    const text = data.getData('text/plain').trim();
+    if (!image && !text) return;
+
+    event.preventDefault();
+    clipboardError = '';
+    clipboardReading = true;
+
     try {
-      if (imageItem) {
-        const file = imageItem.getAsFile();
-        if (file) {
-          event.preventDefault();
-          await processFile(file);
-          return;
-        }
+      if (scanning) {
+        stopCameraScan('idle');
       }
-      const text = data.getData('text')?.trim();
-      if (text) {
-        event.preventDefault();
+
+      if (image) {
+        await processFile(image);
+      } else {
         await analyzeFromText(text);
       }
-    } catch (err: any) {
-      error = err?.message || 'Unable to process clipboard content.';
+    } catch (err: unknown) {
+      clipboardError = clipboardErrorMessage(err);
+    } finally {
+      clipboardReading = false;
     }
   }
 
@@ -1554,22 +1564,35 @@
         <h2 class="hero-title">Don't just YOLO that QR code!</h2>
         <p class="hero-subtitle">Know before you scan. Quick, free, private safety check.</p>
 
-        <div class="action-buttons">
-          <button class="action-btn" type="button" on:click={() => void startCameraScan()}>
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div class="action-buttons" role="group" aria-label="QR input options" aria-describedby="paste-hint">
+          <button class="action-btn" type="button" on:click={() => void startCameraScan()} disabled={busy || scanning}>
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
             </svg>
             <span>Camera</span>
           </button>
-          <label class="action-btn">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <button class="action-btn" type="button" on:click={() => entryFileInput?.click()} disabled={busy}>
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
             </svg>
             <span>Upload</span>
-            <input type="file" accept="image/*" bind:this={entryFileInput} on:change={handleEntryFile} style="display: none;" />
-          </label>
+          </button>
+          <input class="action-file-input" type="file" accept="image/*" bind:this={entryFileInput} on:change={handleEntryFile} disabled={busy} tabindex="-1" aria-hidden="true" />
+          <button
+            class="action-btn"
+            type="button"
+            on:click={() => void pasteFromClipboard()}
+            disabled={busy}
+            aria-busy={clipboardReading}
+          >
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5h6m-5-2h4a2 2 0 012 2v1h2a2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V8a2 2 0 012-2h2V5a2 2 0 012-2zm-2 3h8v3H8V6z"></path>
+            </svg>
+            <span>{clipboardReading ? 'Reading…' : 'Paste'}</span>
+          </button>
         </div>
+        <p class="paste-hint" id="paste-hint">Paste a QR screenshot anywhere on this page. Images stay on your device.</p>
 
         {#if originalInputUrl && flow === 'complete'}
           <div class="last-scanned">

@@ -398,9 +398,9 @@ body[data-theme='light'] .hero-card {
 
 .action-buttons {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.85rem;
 }
 
 .action-btn {
@@ -417,20 +417,40 @@ body[data-theme='light'] .hero-card {
   color: white;
   font-weight: 600;
   font-size: 1.125rem;
+  min-width: 0;
 }
 
-.action-btn:hover {
+.action-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.3);
   transform: scale(1.05);
+}
+
+.action-file-input {
+  display: none;
 }
 
 .action-btn svg {
   width: 2rem;
   height: 2rem;
+  flex: none;
 }
 
 body[data-theme='light'] .action-btn {
   color: #0f172a;
+}
+
+.paste-hint {
+  max-width: 40rem;
+  margin: 0 auto 1.5rem;
+  color: #dbeafe;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  text-align: center;
+  text-wrap: balance;
+}
+
+body[data-theme='light'] .paste-hint {
+  color: #020617;
 }
 
 .cta-row {
@@ -1447,6 +1467,33 @@ input::placeholder {
 }
 
 @media (max-width: 480px) {
+  .hero-card {
+    padding: 1.4rem 1rem;
+  }
+
+  .hero-title {
+    font-size: clamp(1.8rem, 9vw, 2.2rem);
+  }
+
+  .action-buttons {
+    gap: 0.55rem;
+  }
+
+  .action-btn {
+    gap: 0.5rem;
+    padding: 1rem 0.45rem;
+    font-size: 0.95rem;
+  }
+
+  .action-btn svg {
+    width: 1.65rem;
+    height: 1.65rem;
+  }
+
+  .paste-hint {
+    font-size: 0.85rem;
+  }
+
   .entry-sheet {
     padding: 1.2rem;
   }

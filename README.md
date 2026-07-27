@@ -17,7 +17,7 @@ I built QRCheck because I wanted a simple way to check links and QR codes before
 QRCheck gives you X-ray vision for QR codes and URLs with real-time, progressive analysis:
 
 ### 🔍 Decodes QR Codes Locally
-- Scan with your camera or upload an image
+- Scan with your camera, upload an image, or paste a QR screenshot from your clipboard
 - Works with all content types: URLs, text, emails, phone numbers, WiFi credentials, contact cards, and locations
 - Everything happens locally in your browser—zero server round-trips
 - Uses jsQR library for fast, accurate decoding
